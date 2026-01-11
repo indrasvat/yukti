@@ -3,34 +3,40 @@ package styles
 
 import "github.com/charmbracelet/lipgloss"
 
-// Color palette - Tokyo Night inspired theme.
+// Color palette - Catppuccin Mocha inspired theme (brighter, warmer dark theme).
 var (
 	// Primary colors
-	Primary   = lipgloss.Color("#7C3AED") // Purple
-	Secondary = lipgloss.Color("#10B981") // Green
-	Accent    = lipgloss.Color("#F59E0B") // Amber
+	Primary   = lipgloss.Color("#CBA6F7") // Mauve (brighter purple)
+	Secondary = lipgloss.Color("#A6E3A1") // Green
+	Accent    = lipgloss.Color("#F9E2AF") // Yellow
 
 	// Background colors
-	Background = lipgloss.Color("#1A1B26")
-	Surface    = lipgloss.Color("#24283B")
-	Overlay    = lipgloss.Color("#414868")
+	Background = lipgloss.Color("#1E1E2E") // Base
+	Surface    = lipgloss.Color("#313244") // Surface0
+	Overlay    = lipgloss.Color("#45475A") // Surface1
 
 	// Text colors
-	TextPrimary   = lipgloss.Color("#C0CAF5")
-	TextSecondary = lipgloss.Color("#9AA5CE")
-	TextMuted     = lipgloss.Color("#565F89")
+	TextPrimary   = lipgloss.Color("#CDD6F4") // Text (bright)
+	TextSecondary = lipgloss.Color("#BAC2DE") // Subtext1
+	TextMuted     = lipgloss.Color("#6C7086") // Overlay1
 
 	// Status colors
-	Success = lipgloss.Color("#9ECE6A")
-	Warning = lipgloss.Color("#E0AF68")
-	Error   = lipgloss.Color("#F7768E")
-	Info    = lipgloss.Color("#7AA2F7")
+	Success = lipgloss.Color("#A6E3A1") // Green
+	Warning = lipgloss.Color("#FAB387") // Peach
+	Error   = lipgloss.Color("#F38BA8") // Red
+	Info    = lipgloss.Color("#89B4FA") // Blue
 
 	// Border colors
-	Border      = lipgloss.Color("#414868")
-	BorderFocus = lipgloss.Color("#7C3AED")
+	Border      = lipgloss.Color("#45475A") // Surface1
+	BorderFocus = lipgloss.Color("#CBA6F7") // Mauve
 
 	// Special colors
 	White = lipgloss.Color("#FFFFFF")
 	Black = lipgloss.Color("#000000")
+
+	// Additional accent colors
+	Teal   = lipgloss.Color("#94E2D5") // Teal
+	Pink   = lipgloss.Color("#F5C2E7") // Pink
+	Sky    = lipgloss.Color("#89DCEB") // Sky
+	Lavender = lipgloss.Color("#B4BEFE") // Lavender
 )

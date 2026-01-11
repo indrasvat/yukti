@@ -29,7 +29,9 @@ func runTUI() {
 	oauthClientID, oauthClientSecret, err := getOAuthCredentials()
 	if err != nil {
 		// No credentials - show welcome view with setup instructions
-		runWithView(views.NewWelcomeView())
+		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
+			AuthState: tui.AuthStateLoggedOut,
+		})
 		return
 	}
 
@@ -43,17 +45,21 @@ func runTUI() {
 	ctx := context.Background()
 	if auth.IsAuthenticated(ctx) {
 		// User is authenticated - show welcome view (later: project list)
-		runWithView(views.NewWelcomeView())
+		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
+			AuthState: tui.AuthStateLoggedIn,
+		})
 		return
 	}
 
 	// User needs to log in - show login view
-	runWithView(views.NewLoginView(auth))
+	runWithViewAndOpts(views.NewLoginView(auth), tui.AppOptions{
+		AuthState: tui.AuthStateLoggedOut,
+	})
 }
 
-// runWithView runs the TUI application with the given initial view.
-func runWithView(view tui.View) {
-	app := tui.NewApp(view)
+// runWithViewAndOpts runs the TUI application with the given initial view and options.
+func runWithViewAndOpts(view tui.View, opts tui.AppOptions) {
+	app := tui.NewApp(view, opts)
 	p := tea.NewProgram(app, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

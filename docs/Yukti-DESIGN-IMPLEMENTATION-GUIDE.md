@@ -2589,8 +2589,12 @@ jobs:
 - Vim-style keybindings (hjkl navigation)
 - Stack-based router for view navigation
 - macOS Keychain via `github.com/keybase/go-keychain`
-- Config stored at `~/.config/yukti/config.json`
+- File-based token storage alternative (avoids keychain prompts on rebuild)
+- Config stored at `~/Library/Application Support/yukti/config.json` (macOS) or `~/.config/yukti/config.json`
 - OAuth credentials required: `client_id` and `client_secret`
+- CLI commands implemented: `init`, `login`, `logout`, `status`, `version`
+- Setup wizard (`yukti init`) guides users through OAuth credential setup
+- Token storage configurable via `--token-file` flag or `token_file` config option
 
 ### Phase 2: Core Views (Week 3-4)
 

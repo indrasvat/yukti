@@ -10,6 +10,21 @@ import (
 	"yukti/internal/tui/styles"
 )
 
+// AuthState represents the authentication status.
+type AuthState int
+
+const (
+	AuthStateUnknown AuthState = iota
+	AuthStateLoggedOut
+	AuthStateLoggedIn
+)
+
+// AppOptions configures the application.
+type AppOptions struct {
+	AuthState AuthState
+	UserEmail string
+}
+
 // App is the main application model that coordinates all views.
 type App struct {
 	router *Router
@@ -18,6 +33,10 @@ type App struct {
 	// Window dimensions
 	width  int
 	height int
+
+	// Auth state
+	authState AuthState
+	userEmail string
 
 	// Toast notification state
 	toast      string
@@ -28,13 +47,21 @@ type App struct {
 }
 
 // NewApp creates a new application instance with the given initial view.
-func NewApp(initialView View) *App {
-	return &App{
-		router: NewRouter(initialView),
-		keys:   DefaultKeyMap(),
-		width:  80,
-		height: 24,
+func NewApp(initialView View, opts ...AppOptions) *App {
+	app := &App{
+		router:    NewRouter(initialView),
+		keys:      DefaultKeyMap(),
+		width:     80,
+		height:    24,
+		authState: AuthStateUnknown,
 	}
+
+	if len(opts) > 0 {
+		app.authState = opts[0].AuthState
+		app.userEmail = opts[0].UserEmail
+	}
+
+	return app
 }
 
 // Init implements tea.Model.
@@ -108,9 +135,7 @@ func (a *App) View() string {
 	footerHeight := 3
 	contentHeight := a.height - headerHeight - footerHeight
 
-	if contentHeight < 1 {
-		contentHeight = 1
-	}
+	contentHeight = max(1, contentHeight)
 
 	// Build layout
 	header := a.renderHeader()
@@ -138,7 +163,40 @@ func (a *App) renderHeader() string {
 		breadcrumb = styles.SubtitleStyle.Render(" - " + viewTitle)
 	}
 
-	headerContent := title + breadcrumb
+	leftContent := title + breadcrumb
+
+	// Build auth status indicator
+	var authStatus string
+	switch a.authState {
+	case AuthStateLoggedIn:
+		statusStyle := lipgloss.NewStyle().
+			Foreground(styles.Success).
+			Bold(true)
+		emailStyle := lipgloss.NewStyle().
+			Foreground(styles.TextSecondary)
+
+		indicator := statusStyle.Render("●")
+		if a.userEmail != "" {
+			authStatus = indicator + " " + emailStyle.Render(a.userEmail)
+		} else {
+			authStatus = indicator + " " + emailStyle.Render("Logged in")
+		}
+	case AuthStateLoggedOut:
+		statusStyle := lipgloss.NewStyle().
+			Foreground(styles.TextMuted)
+		authStatus = statusStyle.Render("○ Not logged in")
+	}
+
+	// Calculate spacing to right-align auth status
+	leftWidth := lipgloss.Width(leftContent)
+	rightWidth := lipgloss.Width(authStatus)
+	availableWidth := a.width - 4 // Account for padding
+	spacing := availableWidth - leftWidth - rightWidth
+
+	spacing = max(1, spacing)
+
+	spacer := lipgloss.NewStyle().Width(spacing).Render("")
+	headerContent := leftContent + spacer + authStatus
 
 	return styles.HeaderStyle.
 		Width(a.width).
@@ -166,19 +224,36 @@ func (a *App) renderFooter() string {
 	}
 	bindings = append(bindings, a.keys.Quit)
 
-	// Build help text
+	// Build help text with proper styling
+	keyStyle := lipgloss.NewStyle().
+		Foreground(styles.Primary).
+		Background(styles.Overlay).
+		Padding(0, 1).
+		Bold(true)
+
+	descStyle := lipgloss.NewStyle().
+		Foreground(styles.TextSecondary)
+
+	separatorStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Padding(0, 1)
+
 	helpItems := make([]string, 0, len(bindings))
 	for _, binding := range bindings {
 		help := binding.Help()
-		item := styles.MutedStyle.Render(help.Key) + " " +
-			styles.SubtitleStyle.Render(help.Desc)
+		item := keyStyle.Render(help.Key) + " " + descStyle.Render(help.Desc)
 		helpItems = append(helpItems, item)
 	}
 
-	helpText := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		helpItems...,
-	)
+	// Join with separator
+	separator := separatorStyle.Render("│")
+	helpText := lipgloss.JoinHorizontal(lipgloss.Left)
+	for i, item := range helpItems {
+		if i > 0 {
+			helpText = lipgloss.JoinHorizontal(lipgloss.Left, helpText, separator)
+		}
+		helpText = lipgloss.JoinHorizontal(lipgloss.Left, helpText, item)
+	}
 
 	// Add toast if present
 	if a.toast != "" {
