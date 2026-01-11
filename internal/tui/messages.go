@@ -1,6 +1,10 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"yukti/internal/domain/project"
+)
 
 // NavigateMsg requests navigation to a new view.
 type NavigateMsg struct {
@@ -59,3 +63,23 @@ func (e ErrorMsg) Error() string {
 
 // WindowSizeMsg is re-exported for convenience.
 type WindowSizeMsg = tea.WindowSizeMsg
+
+// NavigateToProjectsMsg requests navigation to the projects view.
+type NavigateToProjectsMsg struct{}
+
+// NavigateToProjects returns a command to navigate to the projects view.
+func NavigateToProjects() tea.Cmd {
+	return func() tea.Msg {
+		return NavigateToProjectsMsg{}
+	}
+}
+
+// ProjectSelectedMsg is sent when a project is selected from the list.
+type ProjectSelectedMsg struct {
+	Project project.Project
+}
+
+// FileSelectedMsg is sent when a file is selected from the project detail view.
+type FileSelectedMsg struct {
+	File project.File
+}

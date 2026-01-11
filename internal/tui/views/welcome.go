@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"yukti/internal/buildinfo"
+	"yukti/internal/tui"
 	"yukti/internal/tui/styles"
 )
 
@@ -52,9 +53,14 @@ func (v *WelcomeView) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (v *WelcomeView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
 		v.width = msg.Width
 		v.height = msg.Height
+	case tea.KeyMsg:
+		if msg.String() == "enter" {
+			return v, tui.NavigateToProjects()
+		}
 	}
 	return v, nil
 }

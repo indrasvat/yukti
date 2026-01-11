@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"yukti/internal/domain/project"
 	"yukti/internal/tui/styles"
 )
 
@@ -19,10 +20,18 @@ const (
 	AuthStateLoggedIn
 )
 
+// ViewFactory creates views - used to avoid circular imports between tui and views.
+type ViewFactory interface {
+	CreateProjectsView(repo project.Repository) View
+	CreateProjectDetailView(proj project.Project, repo project.Repository) View
+	CreateCodeViewerView(file project.File) View
+}
+
 // AppOptions configures the application.
 type AppOptions struct {
-	AuthState AuthState
-	UserEmail string
+	AuthState   AuthState
+	UserEmail   string
+	ViewFactory ViewFactory
 }
 
 // App is the main application model that coordinates all views.
@@ -38,6 +47,12 @@ type App struct {
 	authState AuthState
 	userEmail string
 
+	// Project repository (nil if not authenticated)
+	projectRepo project.Repository
+
+	// View factory for creating views (avoids circular imports)
+	viewFactory ViewFactory
+
 	// Toast notification state
 	toast      string
 	toastLevel ToastLevel
@@ -47,21 +62,22 @@ type App struct {
 }
 
 // NewApp creates a new application instance with the given initial view.
-func NewApp(initialView View, opts ...AppOptions) *App {
-	app := &App{
-		router:    NewRouter(initialView),
-		keys:      DefaultKeyMap(),
-		width:     80,
-		height:    24,
-		authState: AuthStateUnknown,
+func NewApp(initialView View, opts AppOptions, projectRepo project.Repository) *App {
+	return &App{
+		router:      NewRouter(initialView),
+		keys:        DefaultKeyMap(),
+		width:       80,
+		height:      24,
+		authState:   opts.AuthState,
+		userEmail:   opts.UserEmail,
+		projectRepo: projectRepo,
+		viewFactory: opts.ViewFactory,
 	}
+}
 
-	if len(opts) > 0 {
-		app.authState = opts[0].AuthState
-		app.userEmail = opts[0].UserEmail
-	}
-
-	return app
+// ProjectRepo returns the project repository for views to use.
+func (a *App) ProjectRepo() project.Repository {
+	return a.projectRepo
 }
 
 // Init implements tea.Model.
@@ -71,41 +87,26 @@ func (a *App) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle navigation messages first
+	if cmd, handled := a.handleNavigation(msg); handled {
+		return a, cmd
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Global key handling
-		switch {
-		case key.Matches(msg, a.keys.Quit):
-			a.quitting = true
-			return a, tea.Quit
-
-		case key.Matches(msg, a.keys.Back):
-			if a.router.CanGoBack() {
-				a.router.Pop()
-				return a, nil
-			}
+		if cmd, handled := a.handleKeyMsg(msg); handled {
+			return a, cmd
 		}
 
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
 
-	case NavigateMsg:
-		cmd := a.router.Push(msg.View)
-		return a, cmd
-
-	case BackMsg:
-		if a.router.CanGoBack() {
-			a.router.Pop()
-		}
-		return a, nil
-
 	case ToastMsg:
 		a.toast = msg.Message
 		a.toastLevel = msg.Level
-		// Clear toast after a delay
 		cmds = append(cmds, clearToastAfterDelay())
 
 	case clearToastMsg:
@@ -122,6 +123,63 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return a, tea.Batch(cmds...)
+}
+
+// handleKeyMsg handles global keyboard shortcuts.
+func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch {
+	case key.Matches(msg, a.keys.Quit):
+		a.quitting = true
+		return tea.Quit, true
+
+	case key.Matches(msg, a.keys.Back):
+		if a.router.CanGoBack() {
+			a.router.Pop()
+			return nil, true
+		}
+	}
+	return nil, false
+}
+
+// handleNavigation handles all navigation-related messages.
+func (a *App) handleNavigation(msg tea.Msg) (tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case NavigateMsg:
+		initCmd := a.router.Push(msg.View)
+		sizeCmd := func() tea.Msg {
+			return tea.WindowSizeMsg{Width: a.width, Height: a.height}
+		}
+		return tea.Batch(initCmd, sizeCmd), true
+
+	case BackMsg:
+		if a.router.CanGoBack() {
+			a.router.Pop()
+		}
+		return nil, true
+
+	case NavigateToProjectsMsg:
+		if a.projectRepo != nil {
+			return a.navigateToProjects(), true
+		}
+		a.toast = "Please login first"
+		a.toastLevel = ToastWarning
+		return clearToastAfterDelay(), true
+
+	case ProjectSelectedMsg:
+		if a.viewFactory != nil && a.projectRepo != nil {
+			view := a.viewFactory.CreateProjectDetailView(msg.Project, a.projectRepo)
+			return Navigate(view), true
+		}
+		return nil, true
+
+	case FileSelectedMsg:
+		if a.viewFactory != nil {
+			view := a.viewFactory.CreateCodeViewerView(msg.File)
+			return Navigate(view), true
+		}
+		return nil, true
+	}
+	return nil, false
 }
 
 // View implements tea.Model.
@@ -282,4 +340,15 @@ func clearToastAfterDelay() tea.Cmd {
 	return tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
 		return clearToastMsg{}
 	})
+}
+
+// navigateToProjects creates and navigates to the projects view.
+func (a *App) navigateToProjects() tea.Cmd {
+	// Import views package dynamically via ViewFactory to avoid circular imports
+	// The actual view creation is done via a factory function set during initialization
+	if a.viewFactory != nil {
+		view := a.viewFactory.CreateProjectsView(a.projectRepo)
+		return Navigate(view)
+	}
+	return nil
 }
