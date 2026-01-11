@@ -2,7 +2,7 @@
 
 > **Version:** 1.0.0
 > **Last Updated:** January 11, 2026
-> **Status:** Living Document — Phase 1 Complete  
+> **Status:** Living Document — Phase 2 Complete  
 
 ---
 
@@ -2620,24 +2620,32 @@ jobs:
 - Header: Shows auth status indicator (green dot = logged in, gray = logged out)
 - iTerm2 automation scripts for TUI testing (`.claude/automations/test_tui.py`)
 
-### Phase 2: Core Views (Week 3-4)
+### Phase 2: Core Views ✅ COMPLETED (January 11, 2026)
 
 **Goals:**
 - Project list view
 - Project detail view
 - File viewer
+- Split-pane workspace
+- Fuzzy finder
 
 **Tasks:**
-1. Implement project repository
-2. Build project list view with navigation
-3. Create project detail view
-4. Implement code viewer with syntax highlighting
-5. Add keyboard navigation
-6. Implement search/filter
+1. ✅ Implement project repository
+2. ✅ Build project list view with navigation
+3. ✅ Create project detail view
+4. ✅ Implement code viewer with syntax highlighting
+5. ✅ Add keyboard navigation
+6. ✅ Implement search/filter
+7. ✅ Split-pane workspace layout
+8. ✅ Fuzzy finder (Ctrl+P)
+9. ✅ Polished welcome screen with gradient ASCII logo
+10. ✅ Rich card-based project list
 
 **Deliverables:**
-- Fully functional project browser
-- Code viewing with syntax highlighting
+- ✅ Fully functional project browser
+- ✅ Code viewing with syntax highlighting
+- ✅ IDE-like split-pane workspace
+- ✅ fzf-style fuzzy finder
 
 **Implementation Notes (January 11, 2026):**
 - **API Discovery:** Apps Script API lacks a `projects.list` endpoint. Uses Google Drive API with `mimeType='application/vnd.google-apps.script'` query to list standalone projects.
@@ -2645,17 +2653,29 @@ jobs:
 - **OAuth Scopes:** Added `https://www.googleapis.com/auth/drive.readonly` for project listing
 - **Project Repository:** `internal/infrastructure/google/project_repo.go` - Uses Drive API for List, Apps Script API for Get/GetContent
 - **Views Implemented:**
-  - `views/projects.go` - Project list with bubbles/list component
-  - `views/project_detail.go` - File list with metadata (type, line count, functions)
+  - `views/welcome.go` - Gradient ASCII art logo (Catppuccin palette), feature cards, CTA button
+  - `views/projects.go` - Rich card-based layout with badges (BOUND/STANDALONE), stats, timestamps
+  - `views/workspace.go` - Split-pane IDE layout with file tree + code viewer
   - `views/code_viewer.go` - Syntax highlighting via chroma library, vim-style navigation
+- **Components Implemented:**
+  - `components/splitpane.go` - Reusable horizontal split pane with focus management
+  - `components/filetree.go` - Virtualized file tree with icons and metadata
+  - `components/fuzzy.go` - fzf-style fuzzy finder with file AND function search
 - **Navigation Pattern:** Stack-based navigation using ViewFactory pattern to avoid circular imports
+- **UI/UX Research:** Comprehensive research compiled in `docs/tui-ui-ux-research.md` covering BubbleTea, Ratatui, Textual best practices
 - **Known Limitation:** Container-bound scripts (attached to Sheets/Docs) not visible via Drive API - only standalone scripts appear
 
+**UI Design Highlights:**
+- Welcome screen: Large ASCII "YUKTI" logo with vertical gradient (Lavender → Blue → Sapphire → Sky)
+- Project cards: Rounded borders, BOUND/STANDALONE badges, relative timestamps, selection indicator
+- Workspace: 28/72 split ratio, focus indicator on pane borders, Tab to switch panes
+- Fuzzy finder: Centered overlay, searches both files and functions, shows line numbers for functions
+- Consistent Catppuccin Mocha color theme throughout
+
 **Future Enhancements:**
-- Split-pane layout (file tree left, code right) - per PRD F3 mockup
-- Tab switching between panes
 - Live file editing
 - GAS API autocomplete (stretch goal F12)
+- File content caching for performance
 
 ### Phase 3: Operations (Week 5-6)
 
