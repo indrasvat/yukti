@@ -27,63 +27,40 @@ sudo mv yukti /usr/local/bin/
 
 > **Downloaded via browser?** Run `xattr -d com.apple.quarantine yukti` before moving.
 
-## Setup (First Time Only)
+## Setup
 
 ### Step 1: Create Google OAuth Credentials
 
-You need your own Google OAuth credentials (one-time setup, ~5 minutes).
+You need your own Google OAuth credentials (~5 minutes, one-time setup).
 
 **[→ Follow the Google OAuth Setup Guide](docs/google-oauth-setup.md)**
 
-After completing the guide, you'll have a `client_id` and `client_secret`.
+You'll get a `client_id` and `client_secret` from a downloaded JSON file.
 
-### Step 2: Configure Yukti
+### Step 2: Run Setup Wizard
 
 ```bash
 yukti init
 ```
 
-This walks you through entering your credentials. They're saved to your config file.
+Enter your Client ID and Client Secret when prompted. The wizard will also ask about token storage (file-based is recommended to avoid keychain prompts).
 
-### Step 3: Enable File-Based Token Storage (Recommended)
-
-This avoids macOS keychain permission popups. Edit your config file:
-
-```bash
-# macOS
-nano ~/Library/Application\ Support/yukti/config.json
-
-# Linux
-nano ~/.config/yukti/config.json
-```
-
-Add `"token_file": "default"`:
-
-```json
-{
-  "oauth": {
-    "client_id": "your-client-id.apps.googleusercontent.com",
-    "client_secret": "your-client-secret"
-  },
-  "token_file": "default"
-}
-```
-
-### Step 4: Login
+### Step 3: Login
 
 ```bash
 yukti login
 ```
 
-Your browser opens. Sign in with Google and authorize Yukti.
+Your browser opens → Sign in with Google → Authorize Yukti.
 
-### Step 5: Verify
+### Step 4: Verify & Launch
 
 ```bash
-yukti status
+yukti status   # Check everything is configured
+yukti          # Launch the TUI
 ```
 
-You should see all green:
+You should see all green indicators:
 
 ```
   ━━ Configuration ━━
@@ -94,12 +71,6 @@ You should see all green:
   ━━ Authentication ━━
   ●  Status       Logged in
   ●  Expires in   ████████████████████ 59m
-```
-
-### Step 6: Launch
-
-```bash
-yukti
 ```
 
 ## Commands
@@ -120,7 +91,7 @@ yukti
 | "This app is blocked" | You need your own OAuth credentials. [Setup guide →](docs/google-oauth-setup.md) |
 | "client_secret is missing" | Re-run `yukti init` and enter both Client ID and Secret |
 | "unverified developer" (macOS) | Run `xattr -d com.apple.quarantine yukti` |
-| Keychain keeps asking for password | Add `"token_file": "default"` to your config |
+| Keychain keeps asking for password | Re-run `yukti init` and choose file-based token storage |
 | Token expired | Run `yukti login` again |
 
 ## Building from Source

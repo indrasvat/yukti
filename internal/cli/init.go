@@ -123,12 +123,28 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("client secret is required")
 	}
 
+	// Ask about file-based token storage
+	fmt.Println()
+	fmt.Println("Token storage options:")
+	fmt.Println("  • Keychain (default) - Secure, but may prompt for password")
+	fmt.Println("  • File-based - No prompts, tokens stored in config directory")
+	fmt.Println()
+	fmt.Print("Use file-based token storage? (recommended) [Y/n]: ")
+	tokenResponse, _ := reader.ReadString('\n')
+	tokenResponse = strings.TrimSpace(strings.ToLower(tokenResponse))
+
+	useFileToken := tokenResponse == "" || tokenResponse == "y" || tokenResponse == "yes"
+
 	// Save config
 	newCfg := &config.Config{
 		OAuth: config.OAuthConfig{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 		},
+	}
+
+	if useFileToken {
+		newCfg.TokenFile = "default"
 	}
 
 	if err := newCfg.Save(); err != nil {
@@ -138,6 +154,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("✓ Configuration saved!")
 	fmt.Printf("  Config file: %s\n", config.DefaultConfigPath())
+	if useFileToken {
+		fmt.Printf("  Token storage: %s\n", config.DefaultTokenFilePath())
+	} else {
+		fmt.Println("  Token storage: System keychain")
+	}
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Run 'yukti login' to authenticate with Google")
