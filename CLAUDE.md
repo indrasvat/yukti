@@ -33,11 +33,15 @@ yukti/
 
 Yukti uses Cobra for CLI management. Available commands:
 - `yukti` - Launch TUI (default when no subcommand)
-- `yukti init` - Interactive OAuth setup wizard
+- `yukti init` - Interactive OAuth setup wizard (asks for credentials + token storage preference)
 - `yukti login` - OAuth authentication flow (opens browser)
 - `yukti logout` - Clear stored credentials
-- `yukti status` - Show auth and config state (beautified output)
+- `yukti status` - Show auth and config state (beautified with colors, progress bar)
 - `yukti version` - Show version info
+
+The `init` wizard prompts for:
+1. Client ID and Client Secret
+2. Token storage preference (file-based recommended, avoids keychain prompts)
 
 ## API Learnings
 
@@ -47,7 +51,7 @@ Yukti uses Cobra for CLI management. Available commands:
 - clasp's OAuth credentials are blocked by Google for third-party use
 - Attempting to use clasp's client ID results in "This app is blocked" error
 
-**Google Cloud Console Setup (as of 2024):**
+**Google Cloud Console Setup:**
 1. Create project at https://console.cloud.google.com/
 2. Enable "Apps Script API" via search bar
 3. Configure OAuth consent screen via "Google Auth Platform" (left sidebar)
@@ -138,6 +142,17 @@ var (
 ```
 Updated Makefile ldflags to use `yukti/internal/buildinfo.Version` etc.
 
+### macOS Quarantine Attribute
+
+**Problem:** Browser-downloaded binaries are quarantined by macOS Gatekeeper, causing "unverified developer" errors.
+
+**Solution:** Remove the quarantine attribute before running:
+```bash
+xattr -d com.apple.quarantine yukti
+```
+
+Note: Downloads via `curl` or `wget` don't have this issue.
+
 ## Performance Notes
 
 - Project list: Pagination required for >100 projects
@@ -202,6 +217,19 @@ Updated Makefile ldflags to use `yukti/internal/buildinfo.Version` etc.
 - `--client-id` - Override OAuth client ID
 - `--client-secret` - Override OAuth client secret
 - `-v, --verbose` - Enable verbose output
+
+## Documentation
+
+**User-facing docs:**
+- `README.md` - Installation, setup steps, commands, troubleshooting
+- `docs/google-oauth-setup.md` - Google Cloud Console setup only (5 steps)
+
+**Developer docs:**
+- `CLAUDE.md` - This file, development learnings for AI sessions
+- `docs/Yukti-PRD.md` - Product requirements
+- `docs/Yukti-DESIGN-IMPLEMENTATION-GUIDE.md` - Architecture and design
+
+Keep README focused on "how to use". Keep OAuth guide focused on Google Cloud Console only (no yukti commands). Avoid duplication between docs.
 
 ## Dependencies
 
