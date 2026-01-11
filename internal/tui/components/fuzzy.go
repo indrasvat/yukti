@@ -273,8 +273,9 @@ func fuzzyScore(text, pattern string) int {
 	}
 
 	// Exact substring match gets highest score
+	// Shorter texts (more precise matches) score higher via ratio
 	if strings.Contains(text, pattern) {
-		return 100 + (len(text) - len(pattern))
+		return 100 + (len(pattern) * 100 / len(text))
 	}
 
 	// Fuzzy matching: all pattern chars must appear in order
