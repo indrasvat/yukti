@@ -14,12 +14,13 @@
 4. [Component Architecture](#component-architecture)
 5. [API Client Design](#api-client-design)
 6. [TUI Architecture](#tui-architecture)
-7. [Plugin System](#plugin-system)
-8. [Testing Strategy](#testing-strategy)
-9. [Observability](#observability)
-10. [Build & Development](#build--development)
-11. [Implementation Phases](#implementation-phases)
-12. [UI Mockups](#ui-mockups)
+7. [TUI UI/UX Research](#tui-uiux-research)
+8. [Plugin System](#plugin-system)
+9. [Testing Strategy](#testing-strategy)
+10. [Observability](#observability)
+11. [Build & Development](#build--development)
+12. [Implementation Phases](#implementation-phases)
+13. [UI Mockups](#ui-mockups)
 
 ---
 
@@ -1730,6 +1731,25 @@ func isJavaScript(filename string) bool {
            strings.HasSuffix(filename, ".js")
 }
 ```
+
+---
+
+## TUI UI/UX Research
+
+Comprehensive research on TUI best practices has been compiled from leading frameworks (BubbleTea, Ratatui, Textual) and exemplary open-source applications (lazygit, k9s, soft-serve).
+
+**See:** [TUI UI/UX Research & Best Practices](./tui-ui-ux-research.md)
+
+Key topics covered:
+- **Split-pane layouts** - Master-detail patterns for IDE-like experiences
+- **Navigation & focus management** - Model stack architecture, focus rings
+- **Keyboard interaction** - Vim-style (hjkl) navigation, keybinding layers
+- **Visual design & theming** - Catppuccin/Dracula/Tokyo Night color systems
+- **Loading states** - Spinner vs progress bar guidelines
+- **Command palette** - Fuzzy finding patterns (fzf-style)
+- **Notifications** - Toast, modal, and inline feedback patterns
+
+This research informs the design decisions for Yukti's TUI and should be consulted when implementing new UI features.
 
 ---
 
