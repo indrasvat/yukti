@@ -1,26 +1,32 @@
 # Yukti
 
-A beautiful TUI for managing Google Apps Script projects.
+The modern terminal interface for Google Apps Script.
+
+## Features
+
+- **Browse** - Navigate projects & files with fuzzy search (Ctrl+P)
+- **Edit** - Syntax-aware code viewing with line numbers
+- **Deploy** - One-click deployments & versioning (coming soon)
 
 ## Installation
 
 ### macOS (Apple Silicon)
 ```bash
-curl -L https://github.com/robinsharma/yukti/releases/latest/download/yukti-darwin-arm64 -o yukti
+curl -L https://github.com/indrasvat/yukti/releases/latest/download/yukti-darwin-arm64 -o yukti
 chmod +x yukti
 sudo mv yukti /usr/local/bin/
 ```
 
 ### macOS (Intel)
 ```bash
-curl -L https://github.com/robinsharma/yukti/releases/latest/download/yukti-darwin-amd64 -o yukti
+curl -L https://github.com/indrasvat/yukti/releases/latest/download/yukti-darwin-amd64 -o yukti
 chmod +x yukti
 sudo mv yukti /usr/local/bin/
 ```
 
 ### Linux
 ```bash
-curl -L https://github.com/robinsharma/yukti/releases/latest/download/yukti-linux-amd64 -o yukti
+curl -L https://github.com/indrasvat/yukti/releases/latest/download/yukti-linux-amd64 -o yukti
 chmod +x yukti
 sudo mv yukti /usr/local/bin/
 ```
@@ -108,7 +114,7 @@ You should see all green indicators:
 ## Building from Source
 
 ```bash
-git clone https://github.com/robinsharma/yukti.git
+git clone https://github.com/indrasvat/yukti.git
 cd yukti
 make build
 ./bin/yukti
@@ -116,4 +122,4 @@ make build
 
 ## License
 
-MIT
+Apache 2.0 - see [LICENSE](LICENSE) for details.
