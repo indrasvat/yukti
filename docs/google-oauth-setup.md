@@ -5,6 +5,8 @@ Yukti requires your own Google OAuth credentials. This is a one-time setup that 
 > **Why can't Yukti use shared credentials?**
 > Google blocks third-party apps from using another application's OAuth credentials. Each user must create their own.
 
+---
+
 ## Step 1: Create a Google Cloud Project
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
@@ -18,7 +20,6 @@ Yukti requires your own Google OAuth credentials. This is a one-time setup that 
 1. In the search bar at the top, type **Apps Script API**
 2. Click on "Apps Script API" in the results
 3. Click the **Enable** button
-4. Wait for the API to be enabled
 
 ## Step 3: Configure OAuth Consent Screen
 
@@ -34,7 +35,7 @@ Yukti requires your own Google OAuth credentials. This is a one-time setup that 
 6. Under "Test users", click **Add users**
 7. Add your Google email address and click **Save**
 
-> **Note:** While your app is in "Testing" mode, only test users can authenticate. This is fine for personal use.
+> **Note:** While in "Testing" mode, only test users can authenticate. This is fine for personal use.
 
 ## Step 4: Create OAuth Credentials
 
@@ -44,80 +45,49 @@ Yukti requires your own Google OAuth credentials. This is a one-time setup that 
 4. Name it `Yukti CLI`
 5. Click **Create**
 
-## Step 5: Download Credentials
+## Step 5: Get Your Credentials
 
 1. After creation, you'll see your new client in the list
 2. Click the **download icon** (↓) to download the JSON file
-3. Open the downloaded JSON file in a text editor
-4. You'll see something like:
+3. Open the JSON file — you'll see:
 
 ```json
 {
   "installed": {
-    "client_id": "123456789-abcdefg.apps.googleusercontent.com",
+    "client_id": "123456789-xxx.apps.googleusercontent.com",
     "client_secret": "GOCSPX-xxxxxxxxxxxxx",
     ...
   }
 }
 ```
 
-5. Note the `client_id` and `client_secret` values — you'll need these next
+4. Keep this file open — you'll need the `client_id` and `client_secret` values
 
-## Step 6: Configure Yukti
+---
 
-Run the setup wizard:
+**Done!** Now return to the terminal and run:
 
 ```bash
 yukti init
 ```
 
-When prompted:
-1. Press Enter to open Google Cloud Console (or 's' to skip if already there)
-2. Paste your **Client ID** from the JSON file
-3. Paste your **Client Secret** from the JSON file
-
-Your credentials are now saved locally at:
-- **macOS:** `~/Library/Application Support/yukti/config.json`
-- **Linux:** `~/.config/yukti/config.json`
-
-## Step 7: Authenticate
-
-```bash
-yukti login
-```
-
-This opens your browser. Sign in with your Google account and authorize Yukti.
-
-## Step 8: Verify
-
-```bash
-yukti status
-```
-
-You should see green indicators showing you're logged in.
+Paste your Client ID and Client Secret when prompted.
 
 ---
 
 ## Troubleshooting
 
-### "This app is blocked" error
+### "This app is blocked"
 
-You're trying to use someone else's OAuth credentials. You must create your own following this guide.
-
-### "client_secret is missing" error
-
-Your config file is missing the client secret. Re-run `yukti init` and make sure to enter both the Client ID AND Client Secret from the downloaded JSON file.
+You're using someone else's OAuth credentials. Create your own following this guide.
 
 ### "Access blocked: This app's request is invalid"
 
-The OAuth consent screen isn't configured correctly. Go back to Step 3 and ensure:
-- You've set up the consent screen
-- You've added yourself as a test user
+The OAuth consent screen isn't configured correctly:
+- Go back to Step 3
+- Ensure you've added yourself as a test user in the Audience section
 
 ### "Error 403: access_denied"
 
-You haven't added yourself as a test user. Go to Google Cloud Console → Google Auth Platform → Audience → Add your email as a test user.
-
-### Token expires frequently
-
-This is normal. Google OAuth tokens expire after 1 hour. Yukti automatically refreshes them using the stored refresh token. If refresh fails, run `yukti login` again.
+You haven't added yourself as a test user. Go to:
+Google Cloud Console → Google Auth Platform → Audience → Add your email
