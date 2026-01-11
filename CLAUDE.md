@@ -55,7 +55,16 @@ yukti/
 
 ## Bug Fixes
 
-(To be filled as bugs are encountered and fixed)
+### Linting Issues (Phase 1)
+- Use `errors.Is()` for error comparison, not `==`
+- Use modern octal literals: `0o700` not `0700`
+- Pre-allocate slices when length is known: `make([]T, 0, len)`
+- Avoid variable shadowing with imported package names
+- Handle error return values from deferred Close() calls: `defer func() { _ = f.Close() }()`
+
+### OAuth2 Token Refresh
+- Always use `oauth2.TokenSource` wrapper, not raw token
+- Store refreshed tokens back to keychain
 
 ## Performance Notes
 
@@ -66,5 +75,30 @@ yukti/
 ## Testing Notes
 
 - `teatest` requires explicit `tea.Quit` to finish
-- iTerm2 driver automation scripts MUST have proper cleanup code
+- iTerm2 driver automation scripts MUST have proper cleanup code (try/finally)
 - Mock repositories should implement full interface
+- Use `clasp` CLI as reference for API behavior verification
+
+## Build System
+
+- Makefile targets: `build`, `test`, `lint`, `fmt`, `ci`, `hooks`
+- Always run `make ci` before committing
+- golangci-lint v2 config in `.golangci.yml`
+- lefthook pre-push hook runs `make ci`
+- Binary output: `bin/yukti`
+
+## Configuration
+
+- Config file: `~/.config/yukti/config.json`
+- Required OAuth fields: `client_id`, `client_secret`
+- Keychain service name: `yukti-gas-cli`
+- Token account name: `oauth-token`
+
+## Dependencies
+
+Key dependencies added in Phase 1:
+- `github.com/charmbracelet/bubbletea` - TUI framework
+- `github.com/charmbracelet/lipgloss` - Styling
+- `github.com/charmbracelet/bubbles` - TUI components
+- `golang.org/x/oauth2` - OAuth2 with PKCE
+- `github.com/keybase/go-keychain` - macOS Keychain (darwin only)
