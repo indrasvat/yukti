@@ -231,6 +231,49 @@ Note: Downloads via `curl` or `wget` don't have this issue.
 
 Keep README focused on "how to use". Keep OAuth guide focused on Google Cloud Console only (no yukti commands). Avoid duplication between docs.
 
+## Clasp Reference (Competitor)
+
+Yukti aims to provide a better TUI experience for clasp's functionality. Here's what clasp supports:
+
+**Auth Commands:**
+- `login` - Log in to script.google.com
+- `logout` - Logout
+- `show-authorized-user` - Show current auth state
+
+**Project Commands:**
+- `create-script` / `create` - Create a script
+- `clone-script` / `clone [scriptId] [versionNumber]` - Clone existing script
+- `delete-script` / `delete [scriptId]` - Delete a project
+- `list-scripts` / `list` - List App Scripts projects
+- `push` - Update remote project
+- `pull` - Fetch remote project
+- `show-file-status` / `status` - List files to be pushed
+
+**Version & Deployment:**
+- `create-version` / `version [description]` - Create immutable version
+- `list-versions` / `versions [scriptId]` - List versions
+- `create-deployment` / `deploy` - Deploy a project
+- `delete-deployment` / `undeploy [deploymentId]` - Delete deployment
+- `list-deployments` / `deployments [scriptId]` - List deployments
+- `update-deployment` / `redeploy <deploymentId>` - Update deployment
+
+**API Management:**
+- `enable-api <api>` - Enable a service
+- `disable-api <api>` - Disable a service
+- `list-apis` / `apis` - List enabled APIs
+
+**Utilities:**
+- `open-script [scriptId]` - Open in Apps Script IDE
+- `open-container` - Open container doc
+- `open-web-app [deploymentId]` - Open deployed web app
+- `open-logs` - Open logs in developer console
+- `setup-logs` - Setup Cloud Logging
+- `tail-logs` / `logs` - Print recent log entries
+- `run-function` / `run [functionName]` - Run a function
+- `open-api-console` - Open API console
+- `open-credentials-setup` - Open credentials page
+- `start-mcp-server` / `mcp` - Start MCP server
+
 ## Dependencies
 
 Key dependencies:

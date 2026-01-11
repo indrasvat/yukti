@@ -2585,7 +2585,7 @@ jobs:
 
 **Implementation Notes:**
 - Go 1.25.5 with golangci-lint v2.1.6
-- Tokyo Night color theme implemented
+- Catppuccin Mocha color theme (brighter, warmer than original Tokyo Night)
 - Vim-style keybindings (hjkl navigation)
 - Stack-based router for view navigation
 - macOS Keychain via `github.com/keybase/go-keychain`
@@ -2595,6 +2595,10 @@ jobs:
 - CLI commands implemented: `init`, `login`, `logout`, `status`, `version`
 - Setup wizard (`yukti init`) guides users through OAuth credential setup
 - Token storage configurable via `--token-file` flag or `token_file` config option
+- Welcome screen: Logo box with rounded border, feature list with icons, version info
+- Status bar: Proper spacing with separators, styled key badges
+- Header: Shows auth status indicator (green dot = logged in, gray = logged out)
+- iTerm2 automation scripts for TUI testing (`.claude/automations/test_tui.py`)
 
 ### Phase 2: Core Views (Week 3-4)
 
@@ -2614,6 +2618,24 @@ jobs:
 **Deliverables:**
 - Fully functional project browser
 - Code viewing with syntax highlighting
+
+**Implementation Notes (January 11, 2026):**
+- **API Discovery:** Apps Script API lacks a `projects.list` endpoint. Uses Google Drive API with `mimeType='application/vnd.google-apps.script'` query to list standalone projects.
+- **Required APIs:** Both Apps Script API and Google Drive API must be enabled in Google Cloud Console
+- **OAuth Scopes:** Added `https://www.googleapis.com/auth/drive.readonly` for project listing
+- **Project Repository:** `internal/infrastructure/google/project_repo.go` - Uses Drive API for List, Apps Script API for Get/GetContent
+- **Views Implemented:**
+  - `views/projects.go` - Project list with bubbles/list component
+  - `views/project_detail.go` - File list with metadata (type, line count, functions)
+  - `views/code_viewer.go` - Syntax highlighting via chroma library, vim-style navigation
+- **Navigation Pattern:** Stack-based navigation using ViewFactory pattern to avoid circular imports
+- **Known Limitation:** Container-bound scripts (attached to Sheets/Docs) not visible via Drive API - only standalone scripts appear
+
+**Future Enhancements:**
+- Split-pane layout (file tree left, code right) - per PRD F3 mockup
+- Tab switching between panes
+- Live file editing
+- GAS API autocomplete (stretch goal F12)
 
 ### Phase 3: Operations (Week 5-6)
 

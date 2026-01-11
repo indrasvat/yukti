@@ -29,7 +29,18 @@ sudo mv yukti /usr/local/bin/
 
 ## Setup
 
-### Step 1: Create Google OAuth Credentials
+### Step 1: Enable Required Google APIs
+
+In the [Google Cloud Console](https://console.cloud.google.com/), enable these APIs for your project:
+
+| API | Purpose |
+|-----|---------|
+| **Apps Script API** | Access project content, deployments, and metrics |
+| **Google Drive API** | List your Apps Script projects |
+
+Navigate to **APIs & Services → Library** and enable both APIs.
+
+### Step 2: Create Google OAuth Credentials
 
 You need your own Google OAuth credentials (~5 minutes, one-time setup).
 
@@ -37,7 +48,7 @@ You need your own Google OAuth credentials (~5 minutes, one-time setup).
 
 You'll get a `client_id` and `client_secret` from a downloaded JSON file.
 
-### Step 2: Run Setup Wizard
+### Step 3: Run Setup Wizard
 
 ```bash
 yukti init
@@ -45,7 +56,7 @@ yukti init
 
 Enter your Client ID and Client Secret when prompted. The wizard will also ask about token storage (file-based is recommended to avoid keychain prompts).
 
-### Step 3: Login
+### Step 4: Login
 
 ```bash
 yukti login
@@ -53,7 +64,7 @@ yukti login
 
 Your browser opens → Sign in with Google → Authorize Yukti.
 
-### Step 4: Verify & Launch
+### Step 5: Verify & Launch
 
 ```bash
 yukti status   # Check everything is configured
