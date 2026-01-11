@@ -2809,6 +2809,10 @@ This file captures learnings during development:
 This document captures learnings, fixes, and patterns discovered during Yukti development.
 Future AI sessions should read this file to avoid repeating mistakes.
 
+## Git Conventions
+- Always create frequent, atomic, relevant, one-liner conventional commits. Commit early, commit often.
+- Never bulk-add files etc (`git add -A` etc). Always explicitly enumerate the files to be staged/committed.
+
 ## API Learnings
 
 ### Google Apps Script API
