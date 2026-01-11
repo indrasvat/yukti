@@ -5,13 +5,27 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"yukti/internal/buildinfo"
 	"yukti/internal/infrastructure/config"
 	"yukti/internal/infrastructure/google"
 	"yukti/internal/infrastructure/keychain"
+)
+
+// ANSI color codes.
+const (
+	colorReset  = "\033[0m"
+	colorBold   = "\033[1m"
+	colorDim    = "\033[2m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorCyan   = "\033[36m"
 )
 
 var statusCmd = &cobra.Command{
@@ -29,72 +43,67 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	fmt.Println("⚡ Yukti Status")
-	fmt.Println("═══════════════════════════════════════════════════════════════")
-	fmt.Println()
+	// Print header
+	printHeader()
 
 	// Check config
 	configPath := config.DefaultConfigPath()
 	cfg, err := config.Load()
 
-	fmt.Println("Configuration:")
+	printSectionHeader("Configuration")
+
 	if err != nil {
-		fmt.Printf("  ✗ Config file: not found\n")
-		fmt.Printf("    Run 'yukti init' to set up credentials\n")
+		printStatusRow("Config", "Not found", statusError)
+		printHint("Run 'yukti init' to set up credentials")
 	} else {
-		fmt.Printf("  ✓ Config file: %s\n", configPath)
+		printStatusRow("Config", shortenPath(configPath), statusOK)
 		if cfg.OAuth.ClientID != "" {
-			// Mask the client ID for privacy
-			maskedID := maskString(cfg.OAuth.ClientID)
-			fmt.Printf("  ✓ Client ID: %s\n", maskedID)
+			printStatusRow("Client ID", maskString(cfg.OAuth.ClientID), statusOK)
 		}
 		if cfg.OAuth.ClientSecret != "" {
-			fmt.Printf("  ✓ Client Secret: ****\n")
+			printStatusRow("Secret", "Configured", statusOK)
 		}
 	}
-	fmt.Println()
 
-	// Check authentication
-	fmt.Println("Authentication:")
+	fmt.Println()
+	printSectionHeader("Authentication")
 
 	kc := keychain.NewStore()
 	if !kc.HasToken() {
-		fmt.Printf("  ✗ Not logged in\n")
-		fmt.Printf("    Run 'yukti login' to authenticate\n")
+		printStatusRow("Status", "Not logged in", statusError)
+		printHint("Run 'yukti login' to authenticate")
+		fmt.Println()
 		return nil
 	}
 
 	token, err := kc.LoadToken()
 	if err != nil {
-		fmt.Printf("  ✗ Error loading token: %v\n", err)
+		printStatusRow("Status", "Error loading token", statusError)
+		fmt.Println()
 		return nil
 	}
 
 	if token == nil {
-		fmt.Printf("  ✗ No token found\n")
+		printStatusRow("Status", "No token found", statusError)
+		fmt.Println()
 		return nil
 	}
 
 	// Check token validity
 	if token.Valid() {
-		fmt.Printf("  ✓ Logged in\n")
+		printStatusRow("Status", "Logged in", statusOK)
 
-		// Show token expiry
+		// Show token expiry with progress bar
 		if !token.Expiry.IsZero() {
 			remaining := time.Until(token.Expiry)
 			if remaining > 0 {
-				fmt.Printf("  ✓ Token expires in: %s\n", formatDuration(remaining))
+				printTokenExpiry(remaining)
 			} else {
-				fmt.Printf("  ⚠ Token expired (will refresh on next use)\n")
+				printStatusRow("Token", "Expired (will refresh)", statusWarning)
 			}
 		}
-
-		// Show token type
-		if token.TokenType != "" {
-			fmt.Printf("  ✓ Token type: %s\n", token.TokenType)
-		}
 	} else {
-		fmt.Printf("  ⚠ Token expired\n")
+		printStatusRow("Status", "Token expired", statusWarning)
 
 		// Check if we can refresh
 		if cfg != nil && cfg.OAuth.ClientID != "" {
@@ -105,10 +114,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			_, err := auth.GetToken(ctx)
 			if err != nil {
-				fmt.Printf("  ✗ Cannot refresh token: %v\n", err)
-				fmt.Printf("    Run 'yukti login' to re-authenticate\n")
+				printStatusRow("Refresh", "Failed", statusError)
+				printHint("Run 'yukti login' to re-authenticate")
 			} else {
-				fmt.Printf("  ✓ Token refreshed successfully\n")
+				printStatusRow("Refresh", "Success", statusOK)
 			}
 		}
 	}
@@ -117,30 +126,121 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+type statusType int
+
+const (
+	statusOK statusType = iota
+	statusWarning
+	statusError
+)
+
+func printHeader() {
+	fmt.Println()
+	fmt.Printf("%s%s", colorBold, colorCyan)
+	fmt.Println("  ╭─────────────────────────────────────────╮")
+	fmt.Println("  │                                         │")
+	fmt.Printf("  │   %s⚡ YUKTI%s%s%s                              │\n", colorYellow, colorReset, colorBold, colorCyan)
+	fmt.Printf("  │   %s%sGoogle Apps Script Manager%s%s%s            │\n", colorReset, colorDim, colorReset, colorBold, colorCyan)
+	fmt.Println("  │                                         │")
+	fmt.Println("  ╰─────────────────────────────────────────╯")
+	fmt.Printf("%s", colorReset)
+
+	// Version info
+	fmt.Printf("  %s%s%s%s\n", colorDim, "v", buildinfo.Version, colorReset)
+	fmt.Println()
+}
+
+func printSectionHeader(title string) {
+	fmt.Printf("  %s%s━━ %s ━━%s\n", colorBold, colorBlue, title, colorReset)
+	fmt.Println()
+}
+
+func printStatusRow(label, value string, status statusType) {
+	var icon, valueColor string
+
+	switch status {
+	case statusOK:
+		icon = colorGreen + "●" + colorReset
+		valueColor = colorGreen
+	case statusWarning:
+		icon = colorYellow + "●" + colorReset
+		valueColor = colorYellow
+	case statusError:
+		icon = colorRed + "●" + colorReset
+		valueColor = colorRed
+	}
+
+	// Pad label to align values
+	paddedLabel := fmt.Sprintf("%-12s", label)
+	fmt.Printf("  %s  %s%s%s %s%s%s\n", icon, colorDim, paddedLabel, colorReset, valueColor, value, colorReset)
+}
+
+func printHint(hint string) {
+	fmt.Printf("     %s%s↳ %s%s\n", colorDim, colorCyan, hint, colorReset)
+}
+
+func printTokenExpiry(remaining time.Duration) {
+	// Calculate percentage (assuming 1 hour token lifetime)
+	maxDuration := time.Hour
+	percentage := min(1.0, float64(remaining)/float64(maxDuration))
+
+	// Create progress bar
+	barWidth := 20
+	filledWidth := max(0, min(barWidth, int(percentage*float64(barWidth))))
+
+	// Choose color based on time remaining
+	var barColor string
+	switch {
+	case remaining < 10*time.Minute:
+		barColor = colorRed
+	case remaining < 30*time.Minute:
+		barColor = colorYellow
+	default:
+		barColor = colorGreen
+	}
+
+	filled := strings.Repeat("█", filledWidth)
+	empty := strings.Repeat("░", barWidth-filledWidth)
+
+	fmt.Printf("  %s●%s  %sExpires in   %s %s%s%s%s%s %s\n",
+		colorGreen, colorReset,
+		colorDim, colorReset,
+		barColor, filled, colorDim, empty, colorReset,
+		formatDuration(remaining))
+}
+
 // maskString masks the middle of a string for privacy.
 func maskString(s string) string {
 	if len(s) <= 12 {
-		return "****"
+		return "••••"
 	}
-	return s[:6] + "****" + s[len(s)-6:]
+	return s[:8] + "••••" + s[len(s)-4:]
+}
+
+// shortenPath shortens a path for display.
+func shortenPath(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if strings.HasPrefix(path, home) {
+		return "~" + path[len(home):]
+	}
+	return path
 }
 
 // formatDuration formats a duration in a human-readable way.
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {
-		return fmt.Sprintf("%d seconds", int(d.Seconds()))
+		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}
 	if d < time.Hour {
-		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+		return fmt.Sprintf("%dm", int(d.Minutes()))
 	}
-	if d < 24*time.Hour {
-		hours := int(d.Hours())
-		minutes := int(d.Minutes()) % 60
-		if minutes > 0 {
-			return fmt.Sprintf("%dh %dm", hours, minutes)
-		}
-		return fmt.Sprintf("%d hours", hours)
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if minutes > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
-	days := int(d.Hours()) / 24
-	return fmt.Sprintf("%d days", days)
+	return fmt.Sprintf("%dh", hours)
 }
