@@ -84,17 +84,18 @@ func runLogin(cmd *cobra.Command, args []string) error {
 }
 
 // getOAuthCredentials returns OAuth credentials from flags, config, or defaults.
+// Note: Client secret is optional for desktop apps using PKCE.
 func getOAuthCredentials() (clientID, clientSecret string, err error) {
 	// Priority: flags > config > defaults
 
 	// Check flags first
-	if GetClientID() != "" && GetClientSecret() != "" {
+	if GetClientID() != "" {
 		return GetClientID(), GetClientSecret(), nil
 	}
 
 	// Try to load from config
 	cfg, err := config.Load()
-	if err == nil && cfg.OAuth.ClientID != "" && cfg.OAuth.ClientSecret != "" {
+	if err == nil && cfg.OAuth.ClientID != "" {
 		return cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, nil
 	}
 
@@ -106,26 +107,28 @@ func getOAuthCredentials() (clientID, clientSecret string, err error) {
 	// No credentials available
 	return "", "", fmt.Errorf(`no OAuth credentials found
 
-To use Yukti, you need to provide Google OAuth credentials.
+To use Yukti, you need to provide a Google OAuth Client ID.
 
-Option 1: Create a config file at ~/.config/yukti/config.json:
+Option 1: Run 'yukti init' for guided setup
+
+Option 2: Create a config file at ~/.config/yukti/config.json:
 {
   "oauth": {
-    "client_id": "YOUR_CLIENT_ID",
-    "client_secret": "YOUR_CLIENT_SECRET"
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com"
   }
 }
 
-Option 2: Use command-line flags:
-  yukti login --client-id=YOUR_ID --client-secret=YOUR_SECRET
+Option 3: Use command-line flag:
+  yukti login --client-id=YOUR_ID
 
-To get credentials:
+To get a Client ID:
 1. Go to https://console.cloud.google.com/
 2. Create or select a project
 3. Enable the "Apps Script API"
-4. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
-5. Choose "Desktop application"
-6. Copy the client ID and secret`)
+4. Configure OAuth consent screen
+5. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
+6. Choose "Desktop application"
+7. Copy the Client ID`)
 }
 
 // getUserEmail attempts to get the user's email from the token.

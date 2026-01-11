@@ -89,8 +89,6 @@ func (c *Config) Validate() error {
 	if c.OAuth.ClientID == "" {
 		return fmt.Errorf("%w: missing OAuth client_id", ErrInvalidConfig)
 	}
-	if c.OAuth.ClientSecret == "" {
-		return fmt.Errorf("%w: missing OAuth client_secret", ErrInvalidConfig)
-	}
+	// Client secret is optional for desktop apps using PKCE
 	return nil
 }
