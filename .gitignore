@@ -31,8 +31,11 @@ go.work.sum
 
 .local/
 
-# Binary
+# Build artifacts
 bin/
+dist/
+coverage/
+tmp/
 yukti
 
 # Logs
