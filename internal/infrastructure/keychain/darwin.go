@@ -22,7 +22,7 @@ type DarwinStore struct{}
 func NewStore() Store {
 	if tokenFile := os.Getenv("YUKTI_TOKEN_FILE"); tokenFile != "" {
 		// Expand ~ to home directory
-		if len(tokenFile) > 0 && tokenFile[0] == '~' {
+		if tokenFile[0] == '~' {
 			home, _ := os.UserHomeDir()
 			tokenFile = filepath.Join(home, tokenFile[1:])
 		}

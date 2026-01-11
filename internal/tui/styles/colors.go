@@ -35,8 +35,8 @@ var (
 	Black = lipgloss.Color("#000000")
 
 	// Additional accent colors
-	Teal   = lipgloss.Color("#94E2D5") // Teal
-	Pink   = lipgloss.Color("#F5C2E7") // Pink
-	Sky    = lipgloss.Color("#89DCEB") // Sky
+	Teal     = lipgloss.Color("#94E2D5") // Teal
+	Pink     = lipgloss.Color("#F5C2E7") // Pink
+	Sky      = lipgloss.Color("#89DCEB") // Sky
 	Lavender = lipgloss.Color("#B4BEFE") // Lavender
 )

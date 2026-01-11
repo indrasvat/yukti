@@ -79,8 +79,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	token, err := kc.LoadToken()
 	if err != nil {
 		printStatusRow("Status", "Error loading token", statusError)
+		printHint(err.Error())
 		fmt.Println()
-		return nil
+		return nil //nolint:nilerr // Return nil to avoid duplicate error output from Cobra
 	}
 
 	if token == nil {

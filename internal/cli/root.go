@@ -82,14 +82,14 @@ func setupTokenFile() {
 
 	// 3. If we have a path, set the env var (keychain package checks this)
 	if effectivePath != "" {
-		os.Setenv("YUKTI_TOKEN_FILE", effectivePath)
+		_ = os.Setenv("YUKTI_TOKEN_FILE", effectivePath)
 	}
 	// If none set, env var from shell (if any) is used, otherwise keychain
 }
 
 // expandPath expands ~ to home directory.
 func expandPath(path string) string {
-	if len(path) > 0 && path[0] == '~' {
+	if path != "" && path[0] == '~' {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return path
