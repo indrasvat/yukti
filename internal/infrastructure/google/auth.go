@@ -136,7 +136,7 @@ func (a *Authenticator) Login(ctx context.Context) (*oauth2.Token, error) {
 		slog.Int("port", port),
 	)
 
-	if err := openBrowser(authURL); err != nil {
+	if err := OpenBrowser(authURL); err != nil {
 		return nil, fmt.Errorf("opening browser: %w", err)
 	}
 

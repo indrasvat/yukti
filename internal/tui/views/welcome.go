@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"yukti/internal/cli"
+	"yukti/internal/buildinfo"
 	"yukti/internal/tui/styles"
 )
 
@@ -80,9 +80,9 @@ func (v *WelcomeView) View() string {
 	subtitle := subtitleStyle.Render("Beautiful TUI for Google Apps Script")
 
 	versionInfo := versionStyle.Render(
-		"Version: " + cli.Version +
-			" | Commit: " + cli.Commit +
-			" | Built: " + cli.BuildDate,
+		"Version: " + buildinfo.Version +
+			" | Commit: " + buildinfo.Commit +
+			" | Built: " + buildinfo.BuildDate,
 	)
 
 	info := infoStyle.Render("Press Enter to get started, or ? for help")

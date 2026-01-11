@@ -13,10 +13,10 @@ GO_VERSION := $(shell go version | cut -d' ' -f3)
 
 # Build flags
 LDFLAGS := -s -w \
-	-X yukti/internal/cli.Version=$(VERSION) \
-	-X yukti/internal/cli.Commit=$(COMMIT) \
-	-X yukti/internal/cli.BuildDate=$(BUILD_DATE) \
-	-X yukti/internal/cli.GoVersion=$(GO_VERSION)
+	-X yukti/internal/buildinfo.Version=$(VERSION) \
+	-X yukti/internal/buildinfo.Commit=$(COMMIT) \
+	-X yukti/internal/buildinfo.BuildDate=$(BUILD_DATE) \
+	-X yukti/internal/buildinfo.GoVersion=$(GO_VERSION)
 
 # Directories
 BIN_DIR := bin

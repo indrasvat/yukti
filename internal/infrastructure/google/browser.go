@@ -5,8 +5,8 @@ import (
 	"runtime"
 )
 
-// openBrowser opens the specified URL in the default browser.
-func openBrowser(url string) error {
+// OpenBrowser opens the specified URL in the default browser.
+func OpenBrowser(url string) error {
 	var cmd *exec.Cmd
 
 	switch runtime.GOOS {
