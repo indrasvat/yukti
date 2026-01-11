@@ -13,6 +13,15 @@ import (
 	"yukti/internal/tui/styles"
 )
 
+// ASCII art logo for Yukti
+const logo = `
+██╗   ██╗██╗   ██╗██╗  ██╗████████╗██╗
+╚██╗ ██╔╝██║   ██║██║ ██╔╝╚══██╔══╝██║
+ ╚████╔╝ ██║   ██║█████╔╝    ██║   ██║
+  ╚██╔╝  ██║   ██║██╔═██╗    ██║   ██║
+   ██║   ╚██████╔╝██║  ██╗   ██║   ██║
+   ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝`
+
 // WelcomeView is the initial landing screen.
 type WelcomeView struct {
 	width  int
@@ -67,73 +76,87 @@ func (v *WelcomeView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View implements tea.Model.
 func (v *WelcomeView) View() string {
-	// Logo box with rounded border
-	logoBoxStyle := lipgloss.NewStyle().
+	taglineStyle := lipgloss.NewStyle().
+		Foreground(styles.TextSecondary).
+		Italic(true).
+		MarginTop(1)
+
+	// Feature card styles
+	cardStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.Primary).
-		Padding(1, 4).
-		Foreground(styles.Primary).
-		Bold(true).
+		BorderForeground(styles.Border).
+		Padding(1, 2).
+		Width(24).
 		Align(lipgloss.Center)
 
-	// Feature list
-	featureStyle := lipgloss.NewStyle().
-		Foreground(styles.TextSecondary)
+	cardTitleStyle := lipgloss.NewStyle().
+		Foreground(styles.Primary).
+		Bold(true)
 
-	featureIconStyle := lipgloss.NewStyle().
-		Foreground(styles.Secondary)
+	cardDescStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		MarginTop(1)
 
-	mutedStyle := lipgloss.NewStyle().
-		Foreground(styles.TextMuted)
+	// CTA button style
+	ctaStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Success).
+		Foreground(styles.Success).
+		Padding(0, 3).
+		Bold(true).
+		MarginTop(2)
 
-	hintStyle := lipgloss.NewStyle().
-		Foreground(styles.Info).
-		Italic(true)
+	versionStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		MarginTop(2)
 
-	// Build features list
+	// Build the logo with gradient colors (Catppuccin palette)
+	logoRendered := renderGradientLogo(logo)
+
+	// Tagline
+	tagline := taglineStyle.Render("The modern terminal interface for Google Apps Script")
+
+	// Feature cards
 	features := []struct {
-		icon string
-		text string
+		icon  string
+		title string
+		desc  string
 	}{
-		{"📁", "Browse and manage your Apps Script projects"},
-		{"📝", "View and edit script files with syntax highlighting"},
-		{"🚀", "Deploy and manage versions"},
-		{"📊", "Monitor execution metrics and logs"},
+		{"📁", "BROWSE", "Navigate projects\n& files with\nfuzzy search"},
+		{"📝", "EDIT", "Syntax-aware\nediting with\nlive preview"},
+		{"🚀", "DEPLOY", "One-click\ndeployments\n& versioning"},
 	}
 
-	featureLines := make([]string, 0, len(features))
+	cards := make([]string, 0, len(features))
 	for _, f := range features {
-		line := featureIconStyle.Render(f.icon) + "  " + featureStyle.Render(f.text)
-		featureLines = append(featureLines, line)
+		title := cardTitleStyle.Render(f.icon + " " + f.title)
+		desc := cardDescStyle.Render(f.desc)
+		card := cardStyle.Render(lipgloss.JoinVertical(lipgloss.Center, title, desc))
+		cards = append(cards, card)
 	}
-	featureList := strings.Join(featureLines, "\n")
+
+	// Join cards horizontally with spacing
+	cardRow := lipgloss.JoinHorizontal(lipgloss.Top, cards[0], "  ", cards[1], "  ", cards[2])
+
+	// CTA button
+	cta := ctaStyle.Render("⏎  Press Enter to continue")
 
 	// Version info
-	versionInfo := mutedStyle.Render(
-		"v" + buildinfo.Version + " • " + buildinfo.Commit,
-	)
+	version := versionStyle.Render("v" + buildinfo.Version + " • Made with ♥")
 
-	// Hint
-	hint := hintStyle.Render("Press Enter to get started")
-
-	// Build the logo box
-	logoContent := "⚡ YUKTI\n\nBeautiful TUI for\nGoogle Apps Script"
-	logoBox := logoBoxStyle.Render(logoContent)
-
-	// Build the content
+	// Combine everything
 	content := lipgloss.JoinVertical(
 		lipgloss.Center,
-		logoBox,
+		logoRendered,
+		tagline,
 		"",
-		featureList,
+		cardRow,
 		"",
-		"",
-		hint,
-		"",
-		versionInfo,
+		cta,
+		version,
 	)
 
-	// Center the content
+	// Center in the viewport
 	return lipgloss.Place(
 		v.width,
 		v.height,
@@ -141,4 +164,36 @@ func (v *WelcomeView) View() string {
 		lipgloss.Center,
 		content,
 	)
+}
+
+// renderGradientLogo renders the logo with a vertical gradient effect.
+// Uses Catppuccin Mocha color palette for a polished appearance.
+func renderGradientLogo(logoText string) string {
+	// Gradient colors from Catppuccin Mocha (top to bottom: Lavender → Blue → Sapphire)
+	gradientColors := []lipgloss.Color{
+		lipgloss.Color("#b4befe"), // Lavender
+		lipgloss.Color("#89b4fa"), // Blue
+		lipgloss.Color("#89b4fa"), // Blue
+		lipgloss.Color("#74c7ec"), // Sapphire
+		lipgloss.Color("#74c7ec"), // Sapphire
+		lipgloss.Color("#89dceb"), // Sky
+	}
+
+	lines := strings.Split(strings.TrimPrefix(logoText, "\n"), "\n")
+	styledLines := make([]string, 0, len(lines))
+
+	for i, line := range lines {
+		colorIdx := i
+		if colorIdx >= len(gradientColors) {
+			colorIdx = len(gradientColors) - 1
+		}
+
+		style := lipgloss.NewStyle().
+			Foreground(gradientColors[colorIdx]).
+			Bold(true)
+
+		styledLines = append(styledLines, style.Render(line))
+	}
+
+	return strings.Join(styledLines, "\n")
 }

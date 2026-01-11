@@ -3,10 +3,10 @@ package views
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,80 +25,34 @@ const (
 	ProjectListStateError
 )
 
-// projectItem implements list.Item for displaying projects.
-type projectItem struct {
-	project project.Project
-}
-
-func (i projectItem) Title() string {
-	return i.project.Title
-}
-
-func (i projectItem) Description() string {
-	icon := styles.StandaloneIcon
-	typeDesc := "Standalone"
-	if i.project.IsBound() {
-		icon = styles.BoundIcon
-		typeDesc = "Bound"
-	}
-
-	timeAgo := formatTimeAgo(i.project.UpdateTime)
-	return fmt.Sprintf("%s %s • Updated %s", icon, typeDesc, timeAgo)
-}
-
-func (i projectItem) FilterValue() string {
-	return i.project.Title
-}
-
 // ProjectsView displays the list of Google Apps Script projects.
 type ProjectsView struct {
-	repo    project.Repository
-	list    list.Model
-	spinner spinner.Model
-	state   ProjectListState
-	errMsg  string
-	width   int
-	height  int
+	repo     project.Repository
+	projects []project.Project
+	spinner  spinner.Model
+	state    ProjectListState
+	errMsg   string
+	selected int
+	offset   int
+	width    int
+	height   int
 }
 
 // NewProjectsView creates a new projects list view.
 func NewProjectsView(repo project.Repository) *ProjectsView {
-	// Create delegate for list items
-	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
-		Foreground(styles.Primary).
-		BorderLeftForeground(styles.Primary)
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
-		Foreground(styles.TextSecondary).
-		BorderLeftForeground(styles.Primary)
-
-	// Create list model
-	l := list.New([]list.Item{}, delegate, 80, 24)
-	l.Title = "Projects"
-	l.SetShowStatusBar(true)
-	l.SetFilteringEnabled(true)
-	l.SetShowHelp(false) // We use our own help
-	l.Styles.Title = lipgloss.NewStyle().
-		Foreground(styles.Primary).
-		Bold(true).
-		Padding(0, 1)
-	l.Styles.FilterPrompt = lipgloss.NewStyle().
-		Foreground(styles.Primary)
-	l.Styles.FilterCursor = lipgloss.NewStyle().
-		Foreground(styles.Primary)
-
 	// Create spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(styles.Primary)
 
 	return &ProjectsView{
-		repo:    repo,
-		list:    l,
-		spinner: s,
-		state:   ProjectListStateLoading,
-		width:   80,
-		height:  24,
+		repo:     repo,
+		spinner:  s,
+		state:    ProjectListStateLoading,
+		selected: 0,
+		offset:   0,
+		width:    80,
+		height:   24,
 	}
 }
 
@@ -149,24 +103,12 @@ func (v *ProjectsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		v.width = msg.Width
 		v.height = msg.Height
-		v.list.SetSize(msg.Width, msg.Height-4) // Account for header/footer
 		return v, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "r":
-			// Refresh
-			if v.state == ProjectListStateReady {
-				v.state = ProjectListStateLoading
-				return v, tea.Batch(v.spinner.Tick, v.loadProjects())
-			}
-		case "enter":
-			// Open selected project
-			if v.state == ProjectListStateReady {
-				if item, ok := v.list.SelectedItem().(projectItem); ok {
-					cmd := v.openProject(item.project)
-					return v, cmd
-				}
+		if v.state == ProjectListStateReady {
+			if cmd, handled := v.handleKeyMsg(msg); handled {
+				return v, cmd
 			}
 		}
 
@@ -179,11 +121,7 @@ func (v *ProjectsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectsLoadedMsg:
 		v.state = ProjectListStateReady
-		items := make([]list.Item, 0, len(msg.projects))
-		for i := range msg.projects {
-			items = append(items, projectItem{project: msg.projects[i]})
-		}
-		v.list.SetItems(items)
+		v.projects = msg.projects
 		return v, nil
 
 	case projectsErrorMsg:
@@ -192,14 +130,54 @@ func (v *ProjectsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return v, nil
 	}
 
-	// Pass events to the list
-	if v.state == ProjectListStateReady {
-		var cmd tea.Cmd
-		v.list, cmd = v.list.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-
 	return v, tea.Batch(cmds...)
+}
+
+// handleKeyMsg handles keyboard input for the projects list.
+func (v *ProjectsView) handleKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "j", "down":
+		if v.selected < len(v.projects)-1 {
+			v.selected++
+			v.ensureVisible()
+		}
+		return nil, true
+	case "k", "up":
+		if v.selected > 0 {
+			v.selected--
+			v.ensureVisible()
+		}
+		return nil, true
+	case "g":
+		v.selected = 0
+		v.offset = 0
+		return nil, true
+	case "G":
+		v.selected = len(v.projects) - 1
+		v.ensureVisible()
+		return nil, true
+	case "r":
+		v.state = ProjectListStateLoading
+		return tea.Batch(v.spinner.Tick, v.loadProjects()), true
+	case "enter":
+		if v.selected < len(v.projects) {
+			return v.openProject(v.projects[v.selected]), true
+		}
+	}
+	return nil, false
+}
+
+// ensureVisible adjusts offset to keep selected item visible.
+func (v *ProjectsView) ensureVisible() {
+	cardHeight := 6 // Height of each project card including spacing
+	visibleCards := max((v.height-10)/cardHeight, 1)
+
+	if v.selected < v.offset {
+		v.offset = v.selected
+	}
+	if v.selected >= v.offset+visibleCards {
+		v.offset = v.selected - visibleCards + 1
+	}
 }
 
 // View implements tea.Model.
@@ -222,7 +200,7 @@ func (v *ProjectsView) renderLoading() string {
 		lipgloss.Center,
 		v.spinner.View(),
 		"",
-		loadingStyle.Render("Loading projects..."),
+		loadingStyle.Render("Loading your projects..."),
 	)
 
 	return lipgloss.Place(
@@ -250,7 +228,7 @@ func (v *ProjectsView) renderError() string {
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Center,
-		titleStyle.Render("Failed to load projects"),
+		titleStyle.Render("✗ Failed to load projects"),
 		messageStyle.Render(v.errMsg),
 		hintStyle.Render("Press 'r' to retry or 'q' to quit"),
 	)
@@ -265,7 +243,188 @@ func (v *ProjectsView) renderError() string {
 }
 
 func (v *ProjectsView) renderList() string {
-	return v.list.View()
+	if len(v.projects) == 0 {
+		return v.renderEmpty()
+	}
+
+	// Header styles
+	headerStyle := lipgloss.NewStyle().
+		Foreground(styles.TextPrimary).
+		Bold(true).
+		MarginBottom(1)
+
+	subHeaderStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted)
+
+	searchHintStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Border).
+		Padding(0, 1)
+
+	// Build header
+	title := headerStyle.Render("YOUR PROJECTS")
+	subtitle := subHeaderStyle.Render(fmt.Sprintf("%d projects", len(v.projects)))
+	searchHint := searchHintStyle.Render("/ Search")
+
+	// Header row with search hint on the right
+	headerWidth := v.width - 8
+	titleSection := lipgloss.JoinVertical(lipgloss.Left, title, subtitle)
+	headerRow := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		titleSection,
+		lipgloss.NewStyle().Width(headerWidth-lipgloss.Width(titleSection)-lipgloss.Width(searchHint)).Render(""),
+		searchHint,
+	)
+
+	// Divider
+	dividerStyle := lipgloss.NewStyle().Foreground(styles.Border)
+	divider := dividerStyle.Render(strings.Repeat("━", headerWidth))
+
+	// Calculate visible projects
+	cardHeight := 6
+	visibleCards := max((v.height-12)/cardHeight, 1)
+
+	start := v.offset
+	end := min(start+visibleCards, len(v.projects))
+
+	// Render project cards
+	cards := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		card := v.renderProjectCard(v.projects[i], i == v.selected)
+		cards = append(cards, card)
+	}
+
+	// Scroll indicator
+	var scrollIndicator string
+	if len(v.projects) > visibleCards {
+		scrollIndicator = subHeaderStyle.Render(fmt.Sprintf("  %d/%d", v.selected+1, len(v.projects)))
+	}
+
+	// Combine content
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerRow,
+		divider,
+		"",
+		strings.Join(cards, "\n"),
+		scrollIndicator,
+	)
+
+	// Add padding
+	paddedContent := lipgloss.NewStyle().
+		Padding(1, 3).
+		Render(content)
+
+	return paddedContent
+}
+
+func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) string {
+	cardWidth := v.width - 12
+
+	// Determine colors based on selection
+	borderColor := styles.Border
+	titleColor := styles.TextPrimary
+	indicator := "  "
+	if selected {
+		borderColor = styles.Primary
+		titleColor = styles.Primary
+		indicator = "▸ "
+	}
+
+	// Card container style
+	cardStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 2).
+		Width(cardWidth)
+
+	// Title with selection indicator
+	titleStyle := lipgloss.NewStyle().
+		Foreground(titleColor).
+		Bold(true)
+
+	// Badge style for project type
+	badgeStyle := lipgloss.NewStyle().
+		Foreground(styles.Background).
+		Bold(true).
+		Padding(0, 1)
+
+	if p.IsBound() {
+		badgeStyle = badgeStyle.Background(styles.Info)
+	} else {
+		badgeStyle = badgeStyle.Background(styles.Success)
+	}
+
+	// Stats style
+	statsStyle := lipgloss.NewStyle().
+		Foreground(styles.TextSecondary)
+
+	// Meta style (time, author)
+	metaStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted)
+
+	// Build the card content
+	title := indicator + titleStyle.Render(p.Title)
+
+	// Badge
+	badgeText := "STANDALONE"
+	if p.IsBound() {
+		badgeText = "BOUND"
+	}
+	badge := badgeStyle.Render(badgeText)
+
+	// Title row with badge on the right
+	titleRowWidth := cardWidth - 6
+	spacer := lipgloss.NewStyle().
+		Width(titleRowWidth - lipgloss.Width(title) - lipgloss.Width(badge)).
+		Render("")
+	titleRow := lipgloss.JoinHorizontal(lipgloss.Top, title, spacer, badge)
+
+	// Stats row (placeholder - we'd need file count from content)
+	stats := statsStyle.Render("📄 Files  •  ƒ Functions")
+
+	// Meta row
+	timeAgo := formatTimeAgo(p.UpdateTime)
+	author := "you"
+	if p.LastModifier.Email != "" && p.LastModifier.Email != p.Creator.Email {
+		author = p.LastModifier.Email
+	}
+	meta := metaStyle.Render(fmt.Sprintf("🕐 Updated %s by %s", timeAgo, author))
+
+	// Combine card content
+	cardContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleRow,
+		stats,
+		meta,
+	)
+
+	return cardStyle.Render(cardContent)
+}
+
+func (v *ProjectsView) renderEmpty() string {
+	emptyStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Italic(true)
+
+	hintStyle := lipgloss.NewStyle().
+		Foreground(styles.Info).
+		MarginTop(2)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Center,
+		emptyStyle.Render("No projects found"),
+		hintStyle.Render("Press 'n' to create a new project"),
+	)
+
+	return lipgloss.Place(
+		v.width,
+		v.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // loadProjects fetches projects from the repository.
