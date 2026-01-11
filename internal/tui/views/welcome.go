@@ -2,6 +2,8 @@
 package views
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -59,41 +61,70 @@ func (v *WelcomeView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View implements tea.Model.
 func (v *WelcomeView) View() string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
+	// Logo box with rounded border
+	logoBoxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Primary).
+		Padding(1, 4).
 		Foreground(styles.Primary).
-		MarginBottom(1)
+		Bold(true).
+		Align(lipgloss.Center)
 
-	subtitleStyle := lipgloss.NewStyle().
-		Foreground(styles.TextSecondary).
-		MarginBottom(2)
+	// Feature list
+	featureStyle := lipgloss.NewStyle().
+		Foreground(styles.TextSecondary)
 
-	versionStyle := lipgloss.NewStyle().
+	featureIconStyle := lipgloss.NewStyle().
+		Foreground(styles.Secondary)
+
+	mutedStyle := lipgloss.NewStyle().
 		Foreground(styles.TextMuted)
 
-	infoStyle := lipgloss.NewStyle().
-		Foreground(styles.TextSecondary).
-		MarginTop(2)
+	hintStyle := lipgloss.NewStyle().
+		Foreground(styles.Info).
+		Italic(true)
 
-	// Build the content
-	title := titleStyle.Render("⚡ Yukti (युक्ति)")
-	subtitle := subtitleStyle.Render("Beautiful TUI for Google Apps Script")
+	// Build features list
+	features := []struct {
+		icon string
+		text string
+	}{
+		{"📁", "Browse and manage your Apps Script projects"},
+		{"📝", "View and edit script files with syntax highlighting"},
+		{"🚀", "Deploy and manage versions"},
+		{"📊", "Monitor execution metrics and logs"},
+	}
 
-	versionInfo := versionStyle.Render(
-		"Version: " + buildinfo.Version +
-			" | Commit: " + buildinfo.Commit +
-			" | Built: " + buildinfo.BuildDate,
+	featureLines := make([]string, 0, len(features))
+	for _, f := range features {
+		line := featureIconStyle.Render(f.icon) + "  " + featureStyle.Render(f.text)
+		featureLines = append(featureLines, line)
+	}
+	featureList := strings.Join(featureLines, "\n")
+
+	// Version info
+	versionInfo := mutedStyle.Render(
+		"v" + buildinfo.Version + " • " + buildinfo.Commit,
 	)
 
-	info := infoStyle.Render("Press Enter to get started, or ? for help")
+	// Hint
+	hint := hintStyle.Render("Press Enter to get started")
 
+	// Build the logo box
+	logoContent := "⚡ YUKTI\n\nBeautiful TUI for\nGoogle Apps Script"
+	logoBox := logoBoxStyle.Render(logoContent)
+
+	// Build the content
 	content := lipgloss.JoinVertical(
 		lipgloss.Center,
-		title,
-		subtitle,
-		versionInfo,
+		logoBox,
 		"",
-		info,
+		featureList,
+		"",
+		"",
+		hint,
+		"",
+		versionInfo,
 	)
 
 	// Center the content
