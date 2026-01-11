@@ -26,6 +26,9 @@ COVERAGE_DIR := coverage
 # macOS code signing (ad-hoc with stable identifier for keychain access)
 BUNDLE_ID := com.yukti.cli
 
+# Development token file (bypasses keychain for faster dev cycles)
+DEV_TOKEN_FILE := $(HOME)/.config/yukti/dev-token.json
+
 # Tools
 GOLANGCI_LINT := golangci-lint
 GORELEASER := goreleaser
@@ -92,17 +95,29 @@ install: build ## Install to GOPATH/bin
 	@echo "$(COLOR_GREEN)✓ Installed to $$(go env GOPATH)/bin/$(BINARY_NAME)$(COLOR_RESET)"
 
 .PHONY: run
-run: build ## Run the TUI (development)
-	@$(BIN_DIR)/$(BINARY_NAME)
+run: build ## Run the TUI (uses file-based token storage)
+	@YUKTI_TOKEN_FILE=$(DEV_TOKEN_FILE) $(BIN_DIR)/$(BINARY_NAME)
 
 .PHONY: dev
 dev: ## Run in development mode with live reload (requires air)
 	@if command -v air > /dev/null; then \
-		air -c .air.toml; \
+		YUKTI_TOKEN_FILE=$(DEV_TOKEN_FILE) air -c .air.toml; \
 	else \
 		echo "air not installed. Run: go install github.com/air-verse/air@latest"; \
 		exit 1; \
 	fi
+
+.PHONY: dev-login
+dev-login: build ## Login using file-based token (no keychain popup)
+	@YUKTI_TOKEN_FILE=$(DEV_TOKEN_FILE) $(BIN_DIR)/$(BINARY_NAME) login
+
+.PHONY: dev-status
+dev-status: build ## Show status using file-based token
+	@YUKTI_TOKEN_FILE=$(DEV_TOKEN_FILE) $(BIN_DIR)/$(BINARY_NAME) status
+
+.PHONY: dev-logout
+dev-logout: build ## Logout from file-based token
+	@YUKTI_TOKEN_FILE=$(DEV_TOKEN_FILE) $(BIN_DIR)/$(BINARY_NAME) logout
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Testing

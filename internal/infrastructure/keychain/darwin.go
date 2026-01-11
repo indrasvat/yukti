@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	gokeychain "github.com/keybase/go-keychain"
 	"golang.org/x/oauth2"
@@ -15,7 +17,17 @@ import (
 type DarwinStore struct{}
 
 // NewStore creates a new keychain store for the current platform.
+// If YUKTI_TOKEN_FILE is set, uses file-based storage instead of keychain.
+// This is useful for development to avoid repeated keychain prompts.
 func NewStore() Store {
+	if tokenFile := os.Getenv("YUKTI_TOKEN_FILE"); tokenFile != "" {
+		// Expand ~ to home directory
+		if len(tokenFile) > 0 && tokenFile[0] == '~' {
+			home, _ := os.UserHomeDir()
+			tokenFile = filepath.Join(home, tokenFile[1:])
+		}
+		return NewFileStore(tokenFile)
+	}
 	return &DarwinStore{}
 }
 
