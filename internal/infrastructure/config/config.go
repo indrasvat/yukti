@@ -19,12 +19,26 @@ var (
 type Config struct {
 	// OAuth2 credentials
 	OAuth OAuthConfig `json:"oauth"`
+
+	// TokenFile stores OAuth tokens in a file instead of system keychain.
+	// Useful to avoid keychain prompts during development.
+	// If empty, uses system keychain.
+	TokenFile string `json:"token_file,omitempty"`
 }
 
 // OAuthConfig holds OAuth2 credentials.
 type OAuthConfig struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
+}
+
+// DefaultTokenFilePath returns the default token file path (used when token_file is "default").
+func DefaultTokenFilePath() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		configDir = os.ExpandEnv("$HOME/.config")
+	}
+	return filepath.Join(configDir, "yukti", "token.json")
 }
 
 // DefaultConfigPath returns the default configuration file path.

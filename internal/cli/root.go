@@ -2,14 +2,18 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"yukti/internal/infrastructure/config"
 )
 
 var (
 	// Flags
 	clientID     string
 	clientSecret string
+	tokenFile    string
 	verbose      bool
 )
 
@@ -23,6 +27,10 @@ interface for browsing, editing, and deploying your scripts.
 
 Run without arguments to start the TUI, or use subcommands for
 specific operations.`,
+	// Set up token file before any command runs
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		setupTokenFile()
+	},
 	// Run TUI when no subcommand is provided
 	Run: func(cmd *cobra.Command, args []string) {
 		runTUI()
@@ -43,7 +51,52 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&clientID, "client-id", "", "OAuth client ID (overrides config)")
 	rootCmd.PersistentFlags().StringVar(&clientSecret, "client-secret", "", "OAuth client secret (overrides config)")
+	rootCmd.PersistentFlags().StringVar(&tokenFile, "token-file", "", "Store tokens in file instead of keychain (use 'default' for ~/.config/yukti/token.json)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+}
+
+// setupTokenFile configures file-based token storage if requested.
+// Priority: --token-file flag > config file > YUKTI_TOKEN_FILE env var
+func setupTokenFile() {
+	var effectivePath string
+
+	// 1. Check flag first (highest priority)
+	if tokenFile != "" {
+		if tokenFile == "default" {
+			effectivePath = config.DefaultTokenFilePath()
+		} else {
+			effectivePath = expandPath(tokenFile)
+		}
+	}
+
+	// 2. Check config file
+	if effectivePath == "" {
+		if cfg, err := config.Load(); err == nil && cfg.TokenFile != "" {
+			if cfg.TokenFile == "default" {
+				effectivePath = config.DefaultTokenFilePath()
+			} else {
+				effectivePath = expandPath(cfg.TokenFile)
+			}
+		}
+	}
+
+	// 3. If we have a path, set the env var (keychain package checks this)
+	if effectivePath != "" {
+		os.Setenv("YUKTI_TOKEN_FILE", effectivePath)
+	}
+	// If none set, env var from shell (if any) is used, otherwise keychain
+}
+
+// expandPath expands ~ to home directory.
+func expandPath(path string) string {
+	if len(path) > 0 && path[0] == '~' {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[1:])
+	}
+	return path
 }
 
 // GetClientID returns the OAuth client ID from flags or empty string.
