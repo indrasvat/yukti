@@ -110,11 +110,17 @@ Google returns `oauth2: "invalid_request" "client_secret is missing."` without i
 **What doesn't work:**
 - Ad-hoc code signing with consistent identifier (`codesign -s - --identifier com.yukti.cli`) - the identifier is the same but the hash still changes
 
-**Solution:** File-based token storage for development.
-- Set `YUKTI_TOKEN_FILE` environment variable to store tokens in a file instead of keychain
-- Token stored at `~/.config/yukti/dev-token.json` with 0600 permissions
-- Use `make run`, `make dev-login`, `make dev-status` for development
-- Keychain is still used for production (installed binary without env var)
+**Solution:** File-based token storage.
+
+Three ways to enable (in priority order):
+1. **Flag:** `yukti --token-file default status` (per-command)
+2. **Config:** Add `"token_file": "default"` to config.json (persistent, recommended)
+3. **Env var:** `YUKTI_TOKEN_FILE=~/.config/yukti/token.json` (per-session)
+
+The value `default` uses the platform's config directory. Custom paths are also supported.
+
+For development with Makefile:
+- `make run`, `make dev-login`, `make dev-status` set the env var automatically
 
 ### Import Cycle Fix
 
@@ -175,17 +181,27 @@ Updated Makefile ldflags to use `yukti/internal/buildinfo.Version` etc.
   "oauth": {
     "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
     "client_secret": "YOUR_CLIENT_SECRET"
-  }
+  },
+  "token_file": "default"
 }
 ```
 
-**Token Storage:**
-- Production: macOS Keychain (service: `yukti-gas-cli`, account: `oauth-token`)
-- Development: File at path specified by `YUKTI_TOKEN_FILE` env var
-- Default dev token: `~/.config/yukti/dev-token.json`
+**Config Options:**
+- `oauth.client_id` - Google OAuth client ID (required)
+- `oauth.client_secret` - Google OAuth client secret (required)
+- `token_file` - Path to store tokens in file instead of keychain; use `"default"` for platform config dir
 
-**Environment Variables:**
-- `YUKTI_TOKEN_FILE` - Path to file-based token storage (bypasses keychain)
+**Token Storage Priority:**
+1. `--token-file` flag
+2. `token_file` in config.json
+3. `YUKTI_TOKEN_FILE` environment variable
+4. System keychain (default)
+
+**CLI Flags:**
+- `--token-file <path>` - Use file-based token storage (use `default` for config dir)
+- `--client-id` - Override OAuth client ID
+- `--client-secret` - Override OAuth client secret
+- `-v, --verbose` - Enable verbose output
 
 ## Dependencies
 

@@ -68,6 +68,26 @@ You should see green indicators:
   ●  Expires in   ████████████████████ 59m
 ```
 
+## File-Based Token Storage
+
+By default, Yukti stores OAuth tokens in your system keychain. To use file-based storage instead (avoids keychain prompts):
+
+**Option 1:** Add to your config file:
+```json
+{
+  "oauth": { ... },
+  "token_file": "default"
+}
+```
+
+**Option 2:** Use the flag:
+```bash
+yukti --token-file default login
+yukti --token-file default status
+```
+
+The `default` value stores tokens at `~/.config/yukti/token.json` (or `~/Library/Application Support/yukti/token.json` on macOS). You can also specify a custom path.
+
 ## Troubleshooting
 
 | Error | Solution |
@@ -75,7 +95,7 @@ You should see green indicators:
 | "This app is blocked" | Create your own OAuth credentials. [Setup guide →](docs/google-oauth-setup.md) |
 | "client_secret is missing" | Re-run `yukti init` with both Client ID and Secret from the JSON |
 | macOS "unverified developer" | Run `xattr -d com.apple.quarantine yukti` |
-| Repeated keychain prompts | Set `YUKTI_TOKEN_FILE=~/.config/yukti/token.json` |
+| Repeated keychain prompts | Add `"token_file": "default"` to config or use `--token-file default` |
 
 ## Building from Source
 
