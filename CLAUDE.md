@@ -16,15 +16,50 @@ Future AI sessions should read this file to avoid repeating mistakes.
 yukti/
 ├── cmd/yukti/          # Application entry point
 ├── internal/
+│   ├── buildinfo/      # Version info (injected via ldflags)
+│   ├── cli/            # Cobra CLI commands (login, logout, init, status, version)
 │   ├── domain/         # Domain entities and interfaces
 │   ├── application/    # Use cases and services
-│   ├── infrastructure/ # External services (Google APIs, keychain, etc.)
+│   ├── infrastructure/ # External services (Google APIs, keychain, config)
+│   │   ├── config/     # Config file management
+│   │   ├── google/     # OAuth authenticator, browser opener
+│   │   └── keychain/   # Token storage (keychain + file-based)
 │   └── tui/            # BubbleTea TUI components
 ├── pkg/                # Public packages (syntax, ascii charts)
 └── plugins/            # Plugin implementations
 ```
 
+## CLI Commands
+
+Yukti uses Cobra for CLI management. Available commands:
+- `yukti` - Launch TUI (default when no subcommand)
+- `yukti init` - Interactive OAuth setup wizard
+- `yukti login` - OAuth authentication flow (opens browser)
+- `yukti logout` - Clear stored credentials
+- `yukti status` - Show auth and config state (beautified output)
+- `yukti version` - Show version info
+
 ## API Learnings
+
+### Google OAuth Setup
+
+**Critical: Users must create their own OAuth credentials.**
+- clasp's OAuth credentials are blocked by Google for third-party use
+- Attempting to use clasp's client ID results in "This app is blocked" error
+
+**Google Cloud Console Setup (as of 2024):**
+1. Create project at https://console.cloud.google.com/
+2. Enable "Apps Script API" via search bar
+3. Configure OAuth consent screen via "Google Auth Platform" (left sidebar)
+   - Click "Get started" or "Configure"
+   - Set app name, add email, choose "External" audience
+   - Add yourself as test user
+4. Create credentials via "Clients" in sidebar
+   - Click "+ Create Client" → "Desktop app"
+   - Download JSON to get both `client_id` and `client_secret`
+
+**Important:** Client secret IS required even for desktop apps using PKCE.
+Google returns `oauth2: "invalid_request" "client_secret is missing."` without it.
 
 ### Google Apps Script API
 
@@ -66,6 +101,37 @@ yukti/
 - Always use `oauth2.TokenSource` wrapper, not raw token
 - Store refreshed tokens back to keychain
 
+### macOS Keychain Popup Issue
+
+**Problem:** Repeated "yukti wants to use your confidential information" popups during development, even after clicking "Always Allow".
+
+**Root Cause:** macOS keychain ties access permissions to the binary's code signature hash. Each rebuild produces a binary with different content (timestamps, etc.), so the hash changes and macOS sees it as a new application.
+
+**What doesn't work:**
+- Ad-hoc code signing with consistent identifier (`codesign -s - --identifier com.yukti.cli`) - the identifier is the same but the hash still changes
+
+**Solution:** File-based token storage for development.
+- Set `YUKTI_TOKEN_FILE` environment variable to store tokens in a file instead of keychain
+- Token stored at `~/.config/yukti/dev-token.json` with 0600 permissions
+- Use `make run`, `make dev-login`, `make dev-status` for development
+- Keychain is still used for production (installed binary without env var)
+
+### Import Cycle Fix
+
+**Problem:** Import cycle between `cli` and `views` packages when sharing version info.
+
+**Solution:** Created `internal/buildinfo` package with version variables:
+```go
+package buildinfo
+var (
+    Version   = "dev"
+    Commit    = "unknown"
+    BuildDate = "unknown"
+    GoVersion = "unknown"
+)
+```
+Updated Makefile ldflags to use `yukti/internal/buildinfo.Version` etc.
+
 ## Performance Notes
 
 - Project list: Pagination required for >100 projects
@@ -81,24 +147,52 @@ yukti/
 
 ## Build System
 
-- Makefile targets: `build`, `test`, `lint`, `fmt`, `ci`, `hooks`
-- Always run `make ci` before committing
+**Main Targets:**
+- `make build` - Build binary (includes ad-hoc code signing on macOS)
+- `make test` - Run tests
+- `make lint` - Run linter
+- `make fmt` - Format code
+- `make ci` - Full CI pipeline (always run before committing)
+- `make hooks` - Setup lefthook git hooks
+
+**Development Targets (file-based token storage, no keychain popups):**
+- `make run` - Build and run TUI
+- `make dev-login` - Login using file-based token
+- `make dev-status` - Show status
+- `make dev-logout` - Logout
+
+**Configuration:**
 - golangci-lint v2 config in `.golangci.yml`
 - lefthook pre-push hook runs `make ci`
 - Binary output: `bin/yukti`
+- Version info injected via ldflags to `internal/buildinfo` package
 
 ## Configuration
 
-- Config file: `~/.config/yukti/config.json`
-- Required OAuth fields: `client_id`, `client_secret`
-- Keychain service name: `yukti-gas-cli`
-- Token account name: `oauth-token`
+**Config File:** `~/.config/yukti/config.json` (macOS: `~/Library/Application Support/yukti/config.json`)
+```json
+{
+  "oauth": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "client_secret": "YOUR_CLIENT_SECRET"
+  }
+}
+```
+
+**Token Storage:**
+- Production: macOS Keychain (service: `yukti-gas-cli`, account: `oauth-token`)
+- Development: File at path specified by `YUKTI_TOKEN_FILE` env var
+- Default dev token: `~/.config/yukti/dev-token.json`
+
+**Environment Variables:**
+- `YUKTI_TOKEN_FILE` - Path to file-based token storage (bypasses keychain)
 
 ## Dependencies
 
-Key dependencies added in Phase 1:
+Key dependencies:
 - `github.com/charmbracelet/bubbletea` - TUI framework
 - `github.com/charmbracelet/lipgloss` - Styling
 - `github.com/charmbracelet/bubbles` - TUI components
+- `github.com/spf13/cobra` - CLI framework
 - `golang.org/x/oauth2` - OAuth2 with PKCE
 - `github.com/keybase/go-keychain` - macOS Keychain (darwin only)
