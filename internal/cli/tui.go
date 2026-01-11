@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"yukti/internal/domain/project"
+	"yukti/internal/infrastructure/cache"
 	"yukti/internal/infrastructure/google"
 	"yukti/internal/infrastructure/keychain"
 	"yukti/internal/tui"
@@ -57,9 +58,10 @@ func runTUI() {
 			return
 		}
 
-		// Create API client and repository
+		// Create API client and repository with caching layer
 		apiClient := google.NewClient(ctx, tokenSource, logger)
-		projectRepo := google.NewProjectRepository(apiClient)
+		googleRepo := google.NewProjectRepository(apiClient)
+		projectRepo := cache.NewCachingRepository(googleRepo)
 
 		// Show welcome view with repository available
 		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
