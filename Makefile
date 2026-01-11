@@ -23,6 +23,9 @@ BIN_DIR := bin
 DIST_DIR := dist
 COVERAGE_DIR := coverage
 
+# macOS code signing (ad-hoc with stable identifier for keychain access)
+BUNDLE_ID := com.yukti.cli
+
 # Tools
 GOLANGCI_LINT := golangci-lint
 GORELEASER := goreleaser
@@ -66,6 +69,9 @@ build: ## Build the binary
 	@echo "$(COLOR_BLUE)▶ Building $(BINARY_NAME)...$(COLOR_RESET)"
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/yukti
+ifeq ($(shell uname),Darwin)
+	@codesign -s - -f --identifier $(BUNDLE_ID) $(BIN_DIR)/$(BINARY_NAME) 2>/dev/null || true
+endif
 	@echo "$(COLOR_GREEN)✓ Built $(BIN_DIR)/$(BINARY_NAME)$(COLOR_RESET)"
 
 .PHONY: build-all
