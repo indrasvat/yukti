@@ -25,6 +25,9 @@ var scopes = []string{
 	"https://www.googleapis.com/auth/script.deployments",
 	"https://www.googleapis.com/auth/script.metrics",
 	"https://www.googleapis.com/auth/script.processes",
+	// Drive API scope needed for listing Apps Script projects
+	// (Apps Script API doesn't have a list endpoint)
+	"https://www.googleapis.com/auth/drive.readonly",
 }
 
 // Common errors.

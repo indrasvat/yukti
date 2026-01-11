@@ -129,9 +129,59 @@ func (c *Client) handleError(resp *http.Response) error {
 	}
 }
 
-// Get performs a GET request.
+// Get performs a GET request with a relative path (appended to baseURL).
 func (c *Client) Get(ctx context.Context, path string, result any) error {
 	return c.do(ctx, http.MethodGet, path, nil, result)
+}
+
+// GetAbsolute performs a GET request with an absolute URL.
+func (c *Client) GetAbsolute(ctx context.Context, url string, result any) error {
+	return c.doAbsolute(ctx, http.MethodGet, url, nil, result)
+}
+
+// doAbsolute executes an HTTP request with an absolute URL.
+func (c *Client) doAbsolute(ctx context.Context, method, url string, body io.Reader, result any) error {
+	c.logger.Debug("API request",
+		slog.String("method", method),
+		slog.String("url", url),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	start := time.Now()
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("executing request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	duration := time.Since(start)
+
+	c.logger.Debug("API response",
+		slog.String("method", method),
+		slog.String("url", url),
+		slog.Int("status", resp.StatusCode),
+		slog.Duration("duration", duration),
+	)
+
+	if resp.StatusCode >= 400 {
+		return c.handleError(resp)
+	}
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("decoding response: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Post performs a POST request with a JSON body.
