@@ -287,7 +287,7 @@ func TestFileTree_EmptyView(t *testing.T) {
 }
 
 func containsText(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && contains(s, substr)
+	return s != "" && substr != "" && contains(s, substr)
 }
 
 func contains(s, substr string) bool {
