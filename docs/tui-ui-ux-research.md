@@ -244,6 +244,262 @@ gui:
 
 ---
 
+## Visual Analysis: Screenshots from Reference TUIs
+
+> **Note:** This section captures detailed observations from actual TUI applications (lazygit, yazi, envx) that inspire Yukti's UI/UX design.
+
+### Lazygit - Panel Numbering & Layout
+
+Lazygit uses a distinctive **numbered panel system** that provides both visual hierarchy and keyboard shortcuts.
+
+#### Panel Structure (from screenshots)
+```
+╭[1]─Status────────────────────╮  ╭[0]─Log/Unstaged changes─────────────────────╮
+│ ✓ yukti → create-yukti       │  │  commit S9ce5c1 (HEAD → create-yukti, ...)  │
+╰──────────────────────────────╯  │  Author: indrasvat <koffee2kode@gmail.com>  │
+╭[2]─Files - Worktrees - ...───╮  │  Date:   5 minutes ago                      │
+│ ▼ internal/tui               │  │                                             │
+│   ▼ components               │  │      docs: update design guide - Phase 2    │
+│     ?? filetree_test.go      │  │                                             │
+│     ?? fuzzy_test.go         │  ╰─────────────────────────────────────────────╯
+│   ▼ views                    │
+│     ?? projects_test.go      │
+╰──────────────────────────────╯
+╭[3]─Local branches - Remotes──╮
+│   * create-yukti ✓           │
+│   17h main ✓                 │
+╰──────────────────────────────╯
+╭[4]─Commits - Reflog──────────╮
+│ S9ce5c12 in ○ docs: update...│
+│ 08f240ff in ○ docs: update...│
+╰──────────────────────────────╯
+╭[5]─Stash────────────────────╮
+│                        0 of 0│
+╰──────────────────────────────╯
+```
+
+#### Key Design Patterns Observed
+
+1. **Numbered Panel Titles**: `[1]`, `[2]`, `[3]`, etc. in panel headers
+   - Numbers allow quick navigation via keyboard
+   - Combined with descriptive title: `[2]─Files - Worktrees - Submodules`
+
+2. **Dash-Based Title Decoration**: `[N]─Title─────────`
+   - Number in brackets
+   - En-dash (`─`) connects number to title
+   - Remaining dashes fill to border edge
+
+3. **Item Counters**: `4 of 6`, `1 of 2`, `1 of 55`, `0 of 0`
+   - Always positioned at bottom-right of panel
+   - Format: `current of total`
+   - Even empty panels show: `0 of 0`
+
+4. **Panel-Local Tabs**: `Files - Worktrees - Submodules`
+   - Multiple views within single panel
+   - Dash-separated labels in title
+
+5. **Focus Indication**:
+   - Focused panel: Bright cyan/green border
+   - Unfocused panel: Muted gray border
+   - Title color matches border color
+
+6. **Context-Sensitive Status Bar**:
+   ```
+   Stage: <space> │ Commit: c │ Edit: e │ Stash: s │ Discard: d │ Reset: D │ Keybindings: ?
+   ```
+   - Changes based on focused panel
+   - Format: `Action: key │ Action: key │ ...`
+   - Pipe (`│`) separators between items
+
+7. **Modal Overlays**:
+   - White/light background for modals
+   - Clear "Press <enter> to get started" or "Press esc to close"
+   - Keybindings menu shows categorized shortcuts:
+     ```
+     ─── Local ───
+     <c-o> Copy branch name to clipboard
+     i     Show git-flow options...
+     <space> Checkout
+     ─── Global ───
+     <c-r> Switch to a recent repo
+     ```
+
+8. **Selection Indicators**:
+   - `▸` or `>` prefix for selected item
+   - Highlighted background on selected row
+   - `??` prefix for untracked files (git status)
+   - `✓` suffix for clean branches
+
+9. **Tree Expansion**: `▼` for expanded, `▸` for collapsed directories
+
+### Yazi - Miller Columns File Manager
+
+Yazi uses a **three-column Miller layout** typical of file managers.
+
+#### Layout Structure
+```
+╭─────────────────╮╭─────────────────────────────╮╭─────────────────────────╮
+│ corp152         ││ ▸ add-ai-neovim             ││ docs                    │
+│ corp152admin    ││   apple-scripts             ││ github-copilot          │
+│ globalit        ││   Applications              ││ nvim                    │
+│ ▸ robinsharma   ││   argo-example-workflows    ││ scripts                 │
+│ ✓ Shared        ││   automator-scripts         ││ AI-NEOVIM-PLAN.md       │
+│                 ││   browser-automations       ││                         │
+│                 ││   bulk-mrs-config           ││                         │
+╰─────────────────╯╰─────────────────────────────╯╰─────────────────────────╯
+```
+
+#### Key Design Patterns Observed
+
+1. **Three-Column Miller View**:
+   - Left: Parent directory (narrow)
+   - Center: Current directory (widest)
+   - Right: Preview of selected item
+
+2. **Item Position Counter**: `1/55` at bottom-right
+   - Format: `position/total` (slash-separated, no "of")
+
+3. **Visual File Type Indicators**:
+   - Folder icons by type (documents, pictures, music, etc.)
+   - Different colors for different file types:
+     - Green: Shell scripts (`.sh`)
+     - Yellow: JSON/config files
+     - Cyan: Markdown
+     - Red: PDFs
+
+4. **Status Line at Bottom**:
+   ```
+   NOR  mode  add-ai-neovim                          drwxr xr x  type  1/55
+   ```
+   - Mode indicator (NOR = normal)
+   - Current selection name
+   - Permissions
+   - Position counter
+
+5. **Minimal Borders**: Just subtle lines, no heavy boxes
+
+### envx - Environment Variable Manager
+
+#### Layout Structure (TUI mode)
+```
+╭─────────────────────────────────────────────────────────────────────────────────╮
+│ envx │ Environment Variable Manager                               v0.1.0        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ ┌Environment Variables (4/84)──────────────────────────────────────────────────┐│
+│ │▸CARGO          C:\Users\Mikko\.rustup\toolchains\stable-x86_64...  Process  ││
+│ │ CARGO_HOME     C:\Users\Mikko\.cargo                               Process  ││
+│ │ CARGO_MANIFEST C:\Users\Mikko\dev\envx\crates\envx                 Process  ││
+│ └──────────────────────────────────────────────────────────────────────────────┘│
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ ↑↓/jk Navigate  Enter/v View  / Search  a Add  e Edit  d Delete  r Refresh  q Quit │
+│                                                                    Item 4 of 84 │
+╰─────────────────────────────────────────────────────────────────────────────────╯
+```
+
+#### Key Design Patterns Observed
+
+1. **Header Bar**: `appname │ Description` with version at right
+
+2. **Title with Count**: `Environment Variables (4/84)`
+   - Format: `Title (current/total)`
+   - In parentheses, slash-separated
+
+3. **Three-Column Data View**:
+   - Column 1: Variable name (left-aligned)
+   - Column 2: Value (truncated with `...`)
+   - Column 3: Source tag (right-aligned, colored)
+
+4. **Source Tags**: `Process`, `System`, `User`, `Shell`
+   - Color-coded by type
+   - Right-aligned in their column
+
+5. **Status Bar Format**:
+   ```
+   ↑↓/jk Navigate  Enter/v View  / Search  a Add  e Edit  d Delete  r Refresh  q Quit
+   ```
+   - Key combo first, then action
+   - Space-separated (not pipe-separated)
+   - Both arrows AND vim keys shown: `↑↓/jk`
+
+6. **Item Counter in Footer**: `Item 4 of 84`
+   - Format: `Item N of M`
+   - Right-aligned in status bar area
+
+7. **CLI Table Output** (non-TUI mode):
+   ```
+   ┼───────────┼────────────────────────┼─────────────────────────────┼
+   │  Source   │         Name           │           Value             │
+   ╪═══════════╪════════════════════════╪═════════════════════════════╪
+   │ Process   │ CARGO                  │ C:\Users\Mikko\.rustup\...  │
+   ├───────────┼────────────────────────┼─────────────────────────────┤
+   ```
+   - Double-line header separator (`═`)
+   - Single-line row separators (`─`)
+
+8. **Bar Charts for Summary**:
+   ```
+   ▸ By Source:
+     System    ████████           17 vars
+     User      ████               11 vars
+     Process   ████████████████   56 vars
+     Shell     ██                  0 vars
+   ```
+   - Colored bars proportional to count
+   - Right-aligned counts
+
+### Implementation Recommendations for Yukti
+
+Based on this visual analysis, here are concrete implementation patterns:
+
+#### 1. Numbered Panel Titles
+```go
+// Format: [N]─Title───────────────────────────
+func buildPanelTitle(num int, title string, width int, focused bool) string {
+    prefix := fmt.Sprintf("[%d]─%s", num, title)
+    remaining := width - len(prefix) - 2 // -2 for corners
+    dashes := strings.Repeat("─", max(0, remaining))
+    return prefix + dashes
+}
+```
+
+#### 2. Item Counter Formats
+Choose ONE format consistently:
+- **Lazygit style**: `4 of 6` (with "of")
+- **Yazi style**: `1/55` (slash, compact)
+- **envx style**: `Item 4 of 84` (with "Item" prefix)
+
+**Recommendation for Yukti**: Use `3 of 15` format (matches lazygit, more readable)
+
+#### 3. Context-Sensitive Status Bar
+```go
+type StatusBar struct {
+    items []StatusItem  // Left-aligned keybinding hints
+    info  string        // Right-aligned: "3 of 15"
+}
+
+// Render: "j/k nav │ Enter open │ ? help                      3 of 15"
+```
+
+#### 4. Focus Border Colors
+```go
+var (
+    FocusedBorder   = lipgloss.Color("#89B4FA")  // Bright blue/cyan
+    UnfocusedBorder = lipgloss.Color("#45475A")  // Muted gray
+)
+```
+
+#### 5. Panel Title Structure
+```
+╭[1]─Files─────────────────────────3 of 15╮
+│ ...content...                           │
+╰─────────────────────────────────────────╯
+```
+- Number in brackets at start
+- Title after dash
+- Info (counter) at end before corner
+
+---
+
 ## Layout Patterns
 
 ### Master-Detail (Split Pane)
