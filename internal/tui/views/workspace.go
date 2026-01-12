@@ -2,6 +2,7 @@ package views
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -34,6 +35,7 @@ type WorkspaceView struct {
 	fileTree   *components.FileTree
 	codeViewer *CodeViewerView
 	fuzzy      *components.FuzzyFinder
+	help       *components.HelpModal
 	spinner    spinner.Model
 
 	// State
@@ -63,11 +65,15 @@ func NewWorkspaceView(proj project.Project, repo project.Repository) *WorkspaceV
 	// Create fuzzy finder
 	fuzzy := components.NewFuzzyFinder()
 
+	// Create help modal
+	help := components.NewHelpModal()
+
 	return &WorkspaceView{
 		proj:           proj,
 		repo:           repo,
 		fileTree:       ft,
 		fuzzy:          fuzzy,
+		help:           help,
 		spinner:        s,
 		state:          WorkspaceStateLoading,
 		focusedPane:    components.LeftPane,
@@ -98,6 +104,10 @@ func (v *WorkspaceView) ShortHelp() []key.Binding {
 			key.WithKeys("ctrl+p"),
 			key.WithHelp("^P", "find"),
 		),
+		key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
 	}
 
 	// Add context-specific bindings
@@ -120,28 +130,42 @@ func (v *WorkspaceView) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (v *WorkspaceView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
+	// Handle modals first (help and fuzzy finder)
+	if handled, cmd := v.handleModals(msg); handled {
+		return v, cmd
+	}
 
-	// Handle fuzzy finder first if visible
+	// Handle main messages
+	return v.handleMainMessages(msg)
+}
+
+// handleModals handles help modal and fuzzy finder overlays.
+func (v *WorkspaceView) handleModals(msg tea.Msg) (handled bool, cmd tea.Cmd) {
+	// Handle help modal first if visible
+	if v.help.IsVisible() {
+		v.help.Update(msg)
+		return true, nil
+	}
+
+	// Handle fuzzy finder if visible
 	if v.fuzzy.IsVisible() {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			var cmd tea.Cmd
 			_, cmd = v.fuzzy.Update(msg)
-			cmds = append(cmds, cmd)
-			return v, tea.Batch(cmds...)
-
+			return true, cmd
 		case components.FuzzySelectMsg:
-			// Handle selection
-			cmd := v.handleFuzzySelect(msg.Item)
-			return v, cmd
+			return true, v.handleFuzzySelect(msg.Item)
 		}
-
-		// Pass other messages to fuzzy
-		_, cmd := v.fuzzy.Update(msg)
-		cmds = append(cmds, cmd)
-		return v, tea.Batch(cmds...)
+		_, cmd = v.fuzzy.Update(msg)
+		return true, cmd
 	}
+
+	return false, nil
+}
+
+// handleMainMessages handles the main workspace messages.
+func (v *WorkspaceView) handleMainMessages(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -150,11 +174,9 @@ func (v *WorkspaceView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		v.updateChildSizes()
 
 	case tea.KeyMsg:
-		cmd := v.handleKeyMsg(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
+		if cmd := v.handleKeyMsg(msg); cmd != nil {
+			return v, cmd
 		}
-		return v, tea.Batch(cmds...)
 
 	case spinner.TickMsg:
 		if v.state == WorkspaceStateLoading {
@@ -164,16 +186,8 @@ func (v *WorkspaceView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case workspaceContentLoadedMsg:
-		v.state = WorkspaceStateReady
-		v.content = msg.content
-		v.fileTree.SetFiles(msg.content.Files)
-		v.fuzzy.SetItems(msg.content.Files)
-
-		// Auto-select first file
-		if len(msg.content.Files) > 0 {
-			v.selectFile(msg.content.Files[0])
-		}
-		return v, nil
+		cmd := v.handleContentLoaded(msg)
+		return v, cmd
 
 	case workspaceContentErrorMsg:
 		v.state = WorkspaceStateError
@@ -197,6 +211,20 @@ func (v *WorkspaceView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return v, tea.Batch(cmds...)
 }
 
+// handleContentLoaded handles when project content is loaded.
+func (v *WorkspaceView) handleContentLoaded(msg workspaceContentLoadedMsg) tea.Cmd {
+	v.state = WorkspaceStateReady
+	v.content = msg.content
+	v.fileTree.SetFiles(msg.content.Files)
+	v.fuzzy.SetItems(msg.content.Files)
+
+	// Auto-select first file
+	if len(msg.content.Files) > 0 {
+		v.selectFile(msg.content.Files[0])
+	}
+	return nil
+}
+
 // handleKeyMsg handles keyboard input.
 func (v *WorkspaceView) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
@@ -206,6 +234,10 @@ func (v *WorkspaceView) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 
 	case "ctrl+p":
 		return v.fuzzy.Show()
+
+	case "?":
+		v.help.Toggle()
+		return nil
 
 	case "r":
 		if v.state == WorkspaceStateReady {
@@ -381,89 +413,205 @@ func (v *WorkspaceView) renderWorkspace() string {
 	// Pane styles based on focus
 	leftBorder := styles.Border
 	rightBorder := styles.Border
+	leftTitleColor := styles.TextMuted
+	rightTitleColor := styles.TextMuted
 	if v.focusedPane == components.LeftPane {
 		leftBorder = styles.Primary
+		leftTitleColor = styles.Primary
 	} else {
 		rightBorder = styles.Primary
+		rightTitleColor = styles.Primary
 	}
+
+	// Build panel titles with numbering like lazygit: [1]─Files
+	leftTitleStyle := lipgloss.NewStyle().Foreground(leftTitleColor).Bold(true)
+	rightTitleStyle := lipgloss.NewStyle().Foreground(rightTitleColor).Bold(true)
+
+	// File count info
+	fileCount := len(v.fileTree.GetFiles())
+	selectedIdx := v.fileTree.GetSelectedIndex()
+	leftInfo := ""
+	if fileCount > 0 {
+		leftInfo = lipgloss.NewStyle().Foreground(styles.TextMuted).
+			Render(fmt.Sprintf("%d of %d", selectedIdx+1, fileCount))
+	}
+
+	// Build left panel with custom title border
+	leftTitle := leftTitleStyle.Render("[1]─Files")
+	leftTopBorder := v.buildTitleBorder(leftTitle, leftInfo, leftWidth-2, leftBorder)
 
 	leftPaneStyle := lipgloss.NewStyle().
 		Width(leftWidth - 2).
-		Height(contentHeight).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(leftBorder)
+		Height(contentHeight - 2)
 
-	rightPaneStyle := lipgloss.NewStyle().
-		Width(rightWidth - 2).
-		Height(contentHeight).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(rightBorder)
+	leftContent := leftPaneStyle.Render(v.fileTree.View())
+	leftPane := v.renderPanelWithTitle(leftTopBorder, leftContent, contentHeight, leftWidth-2, leftBorder)
 
-	// Render panes
-	leftPane := leftPaneStyle.Render(v.fileTree.View())
-
-	var rightPane string
+	// Build right panel
+	var rightContent string
+	var rightTitle string
 	if v.codeViewer != nil {
-		rightPane = rightPaneStyle.Render(v.codeViewer.View())
+		rightTitle = rightTitleStyle.Render("[2]─" + v.codeViewer.GetFileName())
+		rightContent = v.codeViewer.View()
 	} else {
+		rightTitle = rightTitleStyle.Render("[2]─Code")
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(styles.TextMuted).
 			Italic(true)
-		rightPane = rightPaneStyle.Render(
-			lipgloss.Place(
-				rightWidth-4,
-				contentHeight-2,
-				lipgloss.Center,
-				lipgloss.Center,
-				emptyStyle.Render("Select a file to view"),
-			),
+		rightContent = lipgloss.Place(
+			rightWidth-4,
+			contentHeight-4,
+			lipgloss.Center,
+			lipgloss.Center,
+			emptyStyle.Render("Select a file to view"),
 		)
 	}
+
+	rightTopBorder := v.buildTitleBorder(rightTitle, "", rightWidth-2, rightBorder)
+	rightPaneStyle := lipgloss.NewStyle().
+		Width(rightWidth - 2).
+		Height(contentHeight - 2)
+
+	rightContentStyled := rightPaneStyle.Render(rightContent)
+	rightPane := v.renderPanelWithTitle(rightTopBorder, rightContentStyled, contentHeight, rightWidth-2, rightBorder)
 
 	// Join panes
 	workspace := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, " ", rightPane)
 
+	// Add help modal overlay if visible
+	if v.help.IsVisible() {
+		helpView := v.help.View()
+		workspace = v.overlayModal(workspace, helpView)
+	}
+
 	// Add fuzzy finder overlay if visible
 	if v.fuzzy.IsVisible() {
 		fuzzyView := v.fuzzy.View()
-		// Center the fuzzy finder
-		workspace = v.overlayFuzzy(workspace, fuzzyView)
+		workspace = v.overlayModal(workspace, fuzzyView)
 	}
 
 	return workspace
 }
 
-// overlayFuzzy overlays the fuzzy finder on top of the workspace.
-func (v *WorkspaceView) overlayFuzzy(background, overlay string) string {
-	bgLines := lipgloss.Height(background)
-	overlayLines := lipgloss.Height(overlay)
-	overlayWidth := lipgloss.Width(overlay)
+// buildTitleBorder creates a top border with embedded title and optional info.
+func (v *WorkspaceView) buildTitleBorder(title, info string, width int, borderColor lipgloss.Color) string {
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+	infoStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+
+	// Unicode box drawing
+	topLeft := "╭"
+	topRight := "╮"
+	horizontal := "─"
+
+	titleWidth := lipgloss.Width(title)
+	infoWidth := lipgloss.Width(info)
+
+	// Calculate remaining space
+	remaining := width - titleWidth - 2 // -2 for corners
+	if info != "" {
+		remaining -= infoWidth + 2 // space before info
+	}
+	remaining = max(0, remaining)
+
+	// Build border
+	border := topLeft + title
+	for range remaining {
+		border += horizontal
+	}
+	if info != "" {
+		border += infoStyle.Render(info) + horizontal
+	}
+	border += topRight
+
+	return borderStyle.Render(border)
+}
+
+// renderPanelWithTitle renders a panel with custom title border.
+func (v *WorkspaceView) renderPanelWithTitle(topBorder, content string, height, width int, borderColor lipgloss.Color) string {
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+
+	vertical := "│"
+	bottomLeft := "╰"
+	bottomRight := "╯"
+	horizontal := "─"
+
+	lines := splitIntoLines(content)
+
+	var result string
+	result += topBorder + "\n"
+
+	// Content lines
+	contentHeight := height - 2
+	for i := range contentHeight {
+		var line string
+		if i < len(lines) {
+			line = lines[i]
+		}
+
+		// Ensure line fits
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < width-2 {
+			line += lipgloss.NewStyle().Width(width - 2 - lineWidth).Render("")
+		}
+
+		result += borderStyle.Render(vertical) + line + borderStyle.Render(vertical) + "\n"
+	}
+
+	// Bottom border
+	bottom := bottomLeft
+	for range width - 2 {
+		bottom += horizontal
+	}
+	bottom += bottomRight
+	result += borderStyle.Render(bottom)
+
+	return result
+}
+
+// splitIntoLines splits content into lines.
+func splitIntoLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var lines []string
+	start := 0
+	for i := range len(s) {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+// overlayModal overlays a modal on top of the background.
+func (v *WorkspaceView) overlayModal(background, modal string) string {
+	bgHeight := lipgloss.Height(background)
+	modalHeight := lipgloss.Height(modal)
+	modalWidth := lipgloss.Width(modal)
 
 	// Calculate center position
-	topPadding := (bgLines - overlayLines) / 3 // Slight bias toward top
-	leftPadding := (v.width - overlayWidth) / 2
+	topPadding := (bgHeight - modalHeight) / 3
+	leftPadding := (v.width - modalWidth) / 2
 
-	if topPadding < 0 {
-		topPadding = 0
-	}
-	if leftPadding < 0 {
-		leftPadding = 0
-	}
+	topPadding = max(0, topPadding)
+	leftPadding = max(0, leftPadding)
 
 	// Create padded overlay
-	paddedOverlay := lipgloss.NewStyle().
+	paddedModal := lipgloss.NewStyle().
 		MarginTop(topPadding).
 		MarginLeft(leftPadding).
-		Render(overlay)
+		Render(modal)
 
-	// For simplicity, just return the padded overlay on top
-	// A more sophisticated approach would composite the strings
 	return lipgloss.Place(
 		v.width,
 		v.height-6,
 		lipgloss.Left,
 		lipgloss.Top,
-		paddedOverlay,
+		paddedModal,
 	)
 }
 
