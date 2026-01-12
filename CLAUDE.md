@@ -166,6 +166,18 @@ Note: Downloads via `curl` or `wget` don't have this issue.
 - Mock repositories should implement full interface
 - Use `clasp` CLI as reference for API behavior verification
 
+### Apps Script Test Scripts
+
+When creating Apps Script test files for testing Yukti features:
+
+1. **Always include proper logging** - Use `console.log()` to output results. Functions that only return values won't show any output in the Apps Script editor's Execution log.
+
+2. **First run requires permissions** - Running a new script for the first time will prompt the user to grant permissions (Gmail, Drive, Calendar, etc.). This is expected behavior.
+
+3. **Test scripts location** - Sample test scripts are documented in `docs/apps-script-ideas.md` with verified, working code examples.
+
+4. **Script ID for testing** - `1XawIjT8_t7YrgT4uB8wmxXqnJfdHPfPwthmcoED7jc9Sr0rv7hV1Hq6D` (Yukti Test Scripts project)
+
 ## Build System
 
 **Main Targets:**
