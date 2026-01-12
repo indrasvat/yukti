@@ -2736,6 +2736,201 @@ jobs:
 
 ---
 
+## Open Issues
+
+This section documents known UI issues that remain unresolved, along with analysis of root causes and attempted fixes.
+
+### Issue 1: Workspace Pane Background Bleeding
+
+**Symptoms:**
+- In the IDE/workspace view (project detail with file tree + code viewer), the code viewer panel shows a different background color than its surrounding panel
+- The background "bleeds" through, creating visible rectangular areas with mismatched colors
+- This does NOT occur in the projects list view
+
+**Screenshots:** Dark rectangular areas visible inside the code viewer panel, breaking the visual coherence.
+
+**Root Cause Analysis:**
+
+The projects list view uses lipgloss's built-in `RoundedBorder()`:
+```go
+// This works correctly
+style := lipgloss.NewStyle().
+    BorderStyle(lipgloss.RoundedBorder()).
+    BorderForeground(borderColor)
+```
+
+The workspace view uses **custom border rendering** with Unicode box-drawing characters:
+```go
+// This has issues
+func buildTitleBorder(title, info string, width int, borderColor lipgloss.Color) string {
+    // Manually builds: ╭title────info╮
+}
+```
+
+The fundamental problem is **nested ANSI escape code conflicts**:
+1. The title text has its own ANSI styling (e.g., `\e[1;35m Title \e[0m`)
+2. The info text has separate styling (e.g., `\e[90m 3 files \e[0m`)
+3. The border characters are styled (e.g., `\e[36m ╭ \e[0m`)
+4. When concatenated, the inner `\e[0m` reset codes **kill the outer styles**
+5. The terminal then falls back to default colors for subsequent characters
+
+**Why Projects View Works:**
+- Uses lipgloss's `BorderStyle()` which handles ANSI codes internally
+- Border characters are rendered as a single styled unit by lipgloss
+- No embedded styled text within the border line itself
+
+**Why Workspace View Fails:**
+- Embeds pre-styled title and info text INSIDE the border string
+- Each styled segment ends with `\e[0m`, which resets ALL active styles
+- Subsequent border characters lose their styling
+
+### Issue 2: Misaligned Rounded Rectangle Borders
+
+**Symptoms:**
+- Top border corners (╭ ╮) don't align with bottom border corners (╰ ╯)
+- The panel appears "broken" with borders not connecting properly
+- Only occurs in workspace view, not projects view
+
+**Root Cause Analysis:**
+
+The `buildTitleBorder()` function calculates the number of horizontal dashes:
+```go
+dashCount := width - 2 - titleWidth - infoWidth
+dashes := strings.Repeat("─", dashCount)
+```
+
+The issue is that `lipgloss.Width()` returns the **display width** (visual columns), but styled text contains **invisible ANSI escape sequences** that add bytes but not columns.
+
+When you have:
+- `title = "\e[1;35mFiles\e[0m"` → display width = 5, byte length = 15+
+- `info = "\e[90m3 files\e[0m"` → display width = 7, byte length = 17+
+
+The calculation uses display width (correct), but when the string is concatenated and rendered:
+1. Different terminal emulators handle ANSI codes differently
+2. Some terminals count invisible bytes in certain contexts
+3. The result is inconsistent rendering where top/bottom borders have different effective widths
+
+### Attempted Fixes
+
+#### Fix 1: Remove Background from Viewport (PARTIAL SUCCESS)
+```go
+// Before
+v.viewport.Style = lipgloss.NewStyle().
+    Background(tuiStyles.Background)
+
+// After
+// No background - let parent handle it
+```
+**Result:** Helped projects view, did NOT fix workspace view
+
+#### Fix 2: Style Border Segments Separately (FAILED)
+```go
+func buildTitleBorder(...) string {
+    topLeft := borderStyle.Render("╭")
+    topRight := borderStyle.Render("╮")
+    dashes := borderStyle.Render(strings.Repeat("─", dashCount))
+
+    var result strings.Builder
+    result.WriteString(topLeft)
+    result.WriteString(title)  // Already styled
+    result.WriteString(dashes)
+    result.WriteString(infoStyle.Render(info))
+    result.WriteString(topRight)
+    return result.String()
+}
+```
+**Result:** Still fails because concatenating multiple styled strings still creates nested ANSI issues
+
+#### Fix 3: Remove Pre-styling of Info Text (FAILED)
+```go
+// Before: double-styled
+leftInfo := lipgloss.NewStyle().Foreground(styles.TextMuted).Render(fmt.Sprintf(" %d files", len(proj.Files)))
+top := v.buildTitleBorder(leftTitle, leftInfo, ...) // leftInfo already has ANSI codes
+
+// After: single-styled
+leftInfo := fmt.Sprintf(" %d files", len(proj.Files)) // Plain text
+top := v.buildTitleBorder(leftTitle, leftInfo, ...) // Styled inside buildTitleBorder
+```
+**Result:** Reduced double-styling but didn't fix the fundamental issue
+
+#### Fix 4: Change Header/Footer Background Colors (PARTIAL SUCCESS)
+```go
+// Before
+HeaderStyle = lipgloss.NewStyle().Background(Surface)
+
+// After
+HeaderStyle = lipgloss.NewStyle().Background(Background)
+```
+**Result:** Fixed status bar issues in projects view, but NOT workspace view
+
+### Recommended Solutions (Not Yet Implemented)
+
+1. **Replace Custom Borders with lipgloss Built-in Borders**
+   - Refactor workspace panels to use `BorderStyle(lipgloss.RoundedBorder())`
+   - Move title/info text OUTSIDE the border (as header above the panel)
+   - This matches how the projects view works
+
+2. **Use lipgloss's PlaceOverlay for Titles**
+   - Render the bordered box first
+   - Use `lipgloss.Place()` or string manipulation to overlay title on top border
+   - Avoids embedding styled text inside border string
+
+3. **Strip ANSI Codes Before Building Border**
+   - Build border with plain text
+   - Apply single style to entire border string at the end
+   - Re-apply styling to embedded text after border is complete
+
+4. **Consider Alternative Panel Design**
+   - Use a title bar above the panel (separate row)
+   - Use simpler border style (single line, no embedded text)
+   - This sidesteps the ANSI nesting problem entirely
+
+### Files Involved
+
+**Primary Issue Location (Workspace/IDE View):**
+- `/internal/tui/views/workspace.go` - **Main culprit**: Custom border rendering in `buildTitleBorder()` (lines ~496-527) and `renderPanelWithTitle()` (lines ~530-569). This view renders the split-pane IDE interface with file tree on left and code viewer on right.
+- `/internal/tui/views/code_viewer.go` - Viewport component that displays syntax-highlighted code. Background color conflicts occur here.
+
+**Supporting Files:**
+- `/internal/tui/styles/theme.go` - Color definitions (Background #1E1E2E, Surface #313244)
+- `/internal/tui/app.go` - Header/footer rendering (fixed for projects view)
+
+**Working Reference (Projects List View):**
+- `/internal/tui/views/projects.go` - Uses lipgloss built-in `RoundedBorder()` correctly. This view does NOT have the rendering issues and can serve as a reference for how to fix workspace.go.
+
+### Technical Context
+
+**ANSI Escape Code Structure:**
+```
+\e[<style>m  - Start styling (e.g., \e[1;35m for bold magenta)
+\e[0m        - Reset ALL styles to default
+```
+
+**The Problem Visualized:**
+```
+\e[36m╭\e[0m\e[1;35mTitle\e[0m\e[36m────\e[0m\e[90minfo\e[0m\e[36m╮\e[0m
+       ^               ^              ^              ^
+       |               |              |              |
+       After this reset, the subsequent ─ characters
+       briefly have style applied, but then reset again
+
+Terminal may render inconsistently due to these rapid
+style changes within a single line
+```
+
+**Display Width vs Byte Length:**
+```
+Text: "╭" (corner character)
+- Display width: 1 column
+- UTF-8 bytes: 3 bytes (E2 95 AD)
+
+Styled text: "\e[36m╭\e[0m"
+- Display width: 1 column
+- Byte length: 11 bytes (1B 5B 33 36 6D E2 95 AD 1B 5B 30 6D)
+```
+
+---
+
 ## UI Mockups
 
 ### HTML Mockup: Project List
