@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -29,6 +30,7 @@ const (
 type ProjectsView struct {
 	repo     project.Repository
 	projects []project.Project
+	filtered []project.Project // Filtered list (same as projects when no filter)
 	spinner  spinner.Model
 	state    ProjectListState
 	errMsg   string
@@ -36,6 +38,10 @@ type ProjectsView struct {
 	offset   int
 	width    int
 	height   int
+
+	// Filter state
+	filtering   bool
+	filterInput textinput.Model
 }
 
 // NewProjectsView creates a new projects list view.
@@ -45,14 +51,23 @@ func NewProjectsView(repo project.Repository) *ProjectsView {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(styles.Primary)
 
+	// Create filter input
+	ti := textinput.New()
+	ti.Placeholder = "Type to filter..."
+	ti.CharLimit = 50
+	ti.Width = 30
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(styles.Primary)
+	ti.TextStyle = lipgloss.NewStyle().Foreground(styles.TextPrimary)
+
 	return &ProjectsView{
-		repo:     repo,
-		spinner:  s,
-		state:    ProjectListStateLoading,
-		selected: 0,
-		offset:   0,
-		width:    80,
-		height:   24,
+		repo:        repo,
+		spinner:     s,
+		filterInput: ti,
+		state:       ProjectListStateLoading,
+		selected:    0,
+		offset:      0,
+		width:       80,
+		height:      24,
 	}
 }
 
@@ -135,9 +150,17 @@ func (v *ProjectsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyMsg handles keyboard input for the projects list.
 func (v *ProjectsView) handleKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
+	// Handle filter mode
+	if v.filtering {
+		return v.handleFilterKeyMsg(msg)
+	}
+
+	// Get the active list (filtered or all projects)
+	activeList := v.getActiveList()
+
 	switch msg.String() {
 	case "j", "down":
-		if v.selected < len(v.projects)-1 {
+		if v.selected < len(activeList)-1 {
 			v.selected++
 			v.ensureVisible()
 		}
@@ -153,22 +176,94 @@ func (v *ProjectsView) handleKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
 		v.offset = 0
 		return nil, true
 	case "G":
-		v.selected = len(v.projects) - 1
+		v.selected = len(activeList) - 1
 		v.ensureVisible()
 		return nil, true
 	case "r":
 		v.state = ProjectListStateLoading
+		v.clearFilter()
 		return tea.Batch(v.spinner.Tick, v.loadProjects()), true
 	case "enter":
-		if v.selected < len(v.projects) {
-			return v.openProject(v.projects[v.selected]), true
+		if v.selected < len(activeList) {
+			return v.openProject(activeList[v.selected]), true
+		}
+	case "/":
+		v.filtering = true
+		v.filterInput.Focus()
+		return textinput.Blink, true
+	case "esc", "escape":
+		if len(v.filtered) > 0 {
+			v.clearFilter()
+			return nil, true
 		}
 	}
 	return nil, false
 }
 
+// handleFilterKeyMsg handles keyboard input when in filter mode.
+func (v *ProjectsView) handleFilterKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "esc", "escape":
+		v.filtering = false
+		v.filterInput.Blur()
+		return nil, true
+	case "enter":
+		v.filtering = false
+		v.filterInput.Blur()
+		return nil, true
+	}
+
+	// Update the filter input
+	var cmd tea.Cmd
+	v.filterInput, cmd = v.filterInput.Update(msg)
+
+	// Apply filter
+	v.applyFilter()
+
+	return cmd, true
+}
+
+// getActiveList returns the filtered list if a filter is active, otherwise all projects.
+func (v *ProjectsView) getActiveList() []project.Project {
+	if len(v.filtered) > 0 || v.filterInput.Value() != "" {
+		return v.filtered
+	}
+	return v.projects
+}
+
+// applyFilter filters the projects based on the current filter input.
+func (v *ProjectsView) applyFilter() {
+	query := strings.ToLower(v.filterInput.Value())
+	if query == "" {
+		v.filtered = nil
+		return
+	}
+
+	v.filtered = make([]project.Project, 0)
+	for i := range v.projects {
+		if strings.Contains(strings.ToLower(v.projects[i].Title), query) {
+			v.filtered = append(v.filtered, v.projects[i])
+		}
+	}
+
+	// Reset selection if out of bounds
+	if v.selected >= len(v.filtered) {
+		v.selected = max(0, len(v.filtered)-1)
+	}
+	v.offset = 0
+}
+
+// clearFilter clears the current filter.
+func (v *ProjectsView) clearFilter() {
+	v.filterInput.SetValue("")
+	v.filtered = nil
+	v.selected = 0
+	v.offset = 0
+}
+
 // ensureVisible adjusts offset to keep selected item visible.
 func (v *ProjectsView) ensureVisible() {
+	activeList := v.getActiveList()
 	cardHeight := 6 // Height of each project card including spacing
 	visibleCards := max((v.height-10)/cardHeight, 1)
 
@@ -177,6 +272,10 @@ func (v *ProjectsView) ensureVisible() {
 	}
 	if v.selected >= v.offset+visibleCards {
 		v.offset = v.selected - visibleCards + 1
+	}
+	// Clamp to valid range
+	if v.selected >= len(activeList) {
+		v.selected = max(0, len(activeList)-1)
 	}
 }
 
@@ -243,6 +342,8 @@ func (v *ProjectsView) renderError() string {
 }
 
 func (v *ProjectsView) renderList() string {
+	activeList := v.getActiveList()
+
 	if len(v.projects) == 0 {
 		return v.renderEmpty()
 	}
@@ -262,10 +363,35 @@ func (v *ProjectsView) renderList() string {
 		BorderForeground(styles.Border).
 		Padding(0, 1)
 
+	filterActiveStyle := lipgloss.NewStyle().
+		Foreground(styles.Primary).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Primary).
+		Padding(0, 1)
+
 	// Build header
 	title := headerStyle.Render("YOUR PROJECTS")
-	subtitle := subHeaderStyle.Render(fmt.Sprintf("%d projects", len(v.projects)))
-	searchHint := searchHintStyle.Render("/ Search")
+
+	// Subtitle shows filtered count if filter is active
+	var subtitle string
+	if v.filterInput.Value() != "" {
+		subtitle = subHeaderStyle.Render(fmt.Sprintf("%d of %d projects", len(activeList), len(v.projects)))
+	} else {
+		subtitle = subHeaderStyle.Render(fmt.Sprintf("%d projects", len(v.projects)))
+	}
+
+	// Search hint or filter input
+	var searchSection string
+	switch {
+	case v.filtering:
+		// Show filter input
+		searchSection = filterActiveStyle.Render("/ " + v.filterInput.View())
+	case v.filterInput.Value() != "":
+		// Show active filter
+		searchSection = filterActiveStyle.Render("/ " + v.filterInput.Value() + " (esc to clear)")
+	default:
+		searchSection = searchHintStyle.Render("/ Search")
+	}
 
 	// Header row with search hint on the right
 	headerWidth := v.width - 8
@@ -273,32 +399,47 @@ func (v *ProjectsView) renderList() string {
 	headerRow := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		titleSection,
-		lipgloss.NewStyle().Width(headerWidth-lipgloss.Width(titleSection)-lipgloss.Width(searchHint)).Render(""),
-		searchHint,
+		lipgloss.NewStyle().Width(headerWidth-lipgloss.Width(titleSection)-lipgloss.Width(searchSection)).Render(""),
+		searchSection,
 	)
 
 	// Divider
 	dividerStyle := lipgloss.NewStyle().Foreground(styles.Border)
 	divider := dividerStyle.Render(strings.Repeat("━", headerWidth))
 
+	// Handle empty filtered list
+	if len(activeList) == 0 && v.filterInput.Value() != "" {
+		noMatchStyle := lipgloss.NewStyle().
+			Foreground(styles.TextMuted).
+			Italic(true)
+		noMatchContent := lipgloss.JoinVertical(
+			lipgloss.Left,
+			headerRow,
+			divider,
+			"",
+			noMatchStyle.Render("No projects match your filter"),
+		)
+		return lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
+	}
+
 	// Calculate visible projects
 	cardHeight := 6
 	visibleCards := max((v.height-12)/cardHeight, 1)
 
 	start := v.offset
-	end := min(start+visibleCards, len(v.projects))
+	end := min(start+visibleCards, len(activeList))
 
 	// Render project cards
 	cards := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		card := v.renderProjectCard(v.projects[i], i == v.selected)
+		card := v.renderProjectCard(activeList[i], i == v.selected)
 		cards = append(cards, card)
 	}
 
 	// Scroll indicator
 	var scrollIndicator string
-	if len(v.projects) > visibleCards {
-		scrollIndicator = subHeaderStyle.Render(fmt.Sprintf("  %d/%d", v.selected+1, len(v.projects)))
+	if len(activeList) > visibleCards {
+		scrollIndicator = subHeaderStyle.Render(fmt.Sprintf("  %d/%d", v.selected+1, len(activeList)))
 	}
 
 	// Combine content

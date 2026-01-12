@@ -219,15 +219,27 @@ func (v *CodeViewerView) addLineNumbers(source string) string {
 		Width(numWidth + 2).
 		Align(lipgloss.Right)
 
-	separator := lipgloss.NewStyle().
+	separator := " │ "
+	separatorWidth := 3
+
+	// Calculate available width for source code
+	// v.width is the panel width; subtract line number, separator, and padding
+	availableCodeWidth := max(20, v.width-numWidth-2-separatorWidth-4) // -4 for borders and padding
+
+	separatorStyled := lipgloss.NewStyle().
 		Foreground(tuiStyles.Surface).
-		Render(" │ ")
+		Render(separator)
 
 	var result strings.Builder
 	for i, line := range lines {
 		lineNum := lineNumStyle.Render(fmt.Sprintf("%d", i+1))
 		result.WriteString(lineNum)
-		result.WriteString(separator)
+		result.WriteString(separatorStyled)
+
+		// Truncate line if it exceeds available width
+		if lipgloss.Width(line) > availableCodeWidth {
+			line = truncateCode(line, availableCodeWidth)
+		}
 		result.WriteString(line)
 		if i < len(lines)-1 {
 			result.WriteString("\n")
@@ -235,6 +247,37 @@ func (v *CodeViewerView) addLineNumbers(source string) string {
 	}
 
 	return result.String()
+}
+
+// truncateCode truncates a line of code to fit within maxWidth.
+// Handles ANSI-colored strings by measuring display width.
+func truncateCode(s string, maxWidth int) string {
+	if maxWidth <= 3 {
+		return "…"
+	}
+
+	// For ANSI strings, we need to be careful about where we cut
+	// Use lipgloss.Width to measure display width
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+
+	// Simple rune-based truncation - may cut in middle of ANSI codes
+	// but works for most cases. For complex ANSI, would need smarter handling.
+	runes := []rune(s)
+	if len(runes) <= maxWidth-1 {
+		return s
+	}
+
+	// Find a good cut point by measuring progressively
+	for cutPoint := maxWidth - 1; cutPoint > 0; cutPoint-- {
+		truncated := string(runes[:cutPoint]) + "…"
+		if lipgloss.Width(truncated) <= maxWidth {
+			return truncated
+		}
+	}
+
+	return "…"
 }
 
 // fileTypeLabel returns a human-readable label for the file type.

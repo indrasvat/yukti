@@ -3,6 +3,7 @@ package views
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -506,20 +507,16 @@ func (v *WorkspaceView) buildTitleBorder(title, info string, width int, borderCo
 	titleWidth := lipgloss.Width(title)
 	infoWidth := lipgloss.Width(info)
 
-	// Calculate remaining space
-	remaining := width - titleWidth - 2 // -2 for corners
-	if info != "" {
-		remaining -= infoWidth + 2 // space before info
-	}
-	remaining = max(0, remaining)
+	// Total width = 1 (╭) + titleWidth + dashes + infoWidth + 1 (╮)
+	// Therefore: dashes = width - 2 - titleWidth - infoWidth
+	dashCount := width - 2 - titleWidth - infoWidth
+	dashCount = max(0, dashCount)
+	dashes := strings.Repeat(horizontal, dashCount)
 
-	// Build border
-	border := topLeft + title
-	for range remaining {
-		border += horizontal
-	}
+	// Build border: ╭title────info╮
+	border := topLeft + title + dashes
 	if info != "" {
-		border += infoStyle.Render(info) + horizontal
+		border += infoStyle.Render(info)
 	}
 	border += topRight
 

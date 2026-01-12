@@ -285,8 +285,6 @@ func (a *App) renderFooter() string {
 	// Build help text with proper styling
 	keyStyle := lipgloss.NewStyle().
 		Foreground(styles.Primary).
-		Background(styles.Overlay).
-		Padding(0, 1).
 		Bold(true)
 
 	descStyle := lipgloss.NewStyle().
