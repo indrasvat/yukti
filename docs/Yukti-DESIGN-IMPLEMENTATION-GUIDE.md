@@ -2736,11 +2736,13 @@ jobs:
 
 ---
 
-## Open Issues
+## Resolved Issues
 
-This section documents known UI issues that remain unresolved, along with analysis of root causes and attempted fixes.
+This section documents UI issues that were encountered and resolved during development, along with analysis of root causes and fixes. Kept for future reference.
 
-### Issue 1: Workspace Pane Background Bleeding
+### Issue 1: Workspace Pane Background Bleeding ✅ RESOLVED
+
+**Fixed in:** commit `21574bc` (January 11, 2026)
 
 **Symptoms:**
 - In the IDE/workspace view (project detail with file tree + code viewer), the code viewer panel shows a different background color than its surrounding panel
@@ -2784,7 +2786,9 @@ The fundamental problem is **nested ANSI escape code conflicts**:
 - Each styled segment ends with `\e[0m`, which resets ALL active styles
 - Subsequent border characters lose their styling
 
-### Issue 2: Misaligned Rounded Rectangle Borders
+### Issue 2: Misaligned Rounded Rectangle Borders ✅ RESOLVED
+
+**Fixed in:** commit `21574bc` (January 11, 2026)
 
 **Symptoms:**
 - Top border corners (╭ ╮) don't align with bottom border corners (╰ ╯)
@@ -2863,40 +2867,21 @@ HeaderStyle = lipgloss.NewStyle().Background(Background)
 ```
 **Result:** Fixed status bar issues in projects view, but NOT workspace view
 
-### Recommended Solutions (Not Yet Implemented)
+### Solution Implemented
 
-1. **Replace Custom Borders with lipgloss Built-in Borders**
-   - Refactor workspace panels to use `BorderStyle(lipgloss.RoundedBorder())`
-   - Move title/info text OUTSIDE the border (as header above the panel)
-   - This matches how the projects view works
+The fix used **option 4: Alternative Panel Design** combined with **termenv background color**:
 
-2. **Use lipgloss's PlaceOverlay for Titles**
-   - Render the bordered box first
-   - Use `lipgloss.Place()` or string manipulation to overlay title on top border
-   - Avoids embedding styled text inside border string
+1. **Simplified panel borders** - Used lipgloss's built-in border styles consistently
+2. **Removed embedded styled text from borders** - Title/info rendered separately from border characters
+3. **termenv.SetBackgroundColor()** - Set terminal's default background to match app background, ensuring all empty cells use the correct color
 
-3. **Strip ANSI Codes Before Building Border**
-   - Build border with plain text
-   - Apply single style to entire border string at the end
-   - Re-apply styling to embedded text after border is complete
+### Files Modified
 
-4. **Consider Alternative Panel Design**
-   - Use a title bar above the panel (separate row)
-   - Use simpler border style (single line, no embedded text)
-   - This sidesteps the ANSI nesting problem entirely
-
-### Files Involved
-
-**Primary Issue Location (Workspace/IDE View):**
-- `/internal/tui/views/workspace.go` - **Main culprit**: Custom border rendering in `buildTitleBorder()` (lines ~496-527) and `renderPanelWithTitle()` (lines ~530-569). This view renders the split-pane IDE interface with file tree on left and code viewer on right.
-- `/internal/tui/views/code_viewer.go` - Viewport component that displays syntax-highlighted code. Background color conflicts occur here.
-
-**Supporting Files:**
+- `/internal/tui/views/workspace.go` - Refactored border rendering
+- `/internal/tui/views/code_viewer.go` - Fixed viewport background handling
 - `/internal/tui/styles/theme.go` - Color definitions (Background #1E1E2E, Surface #313244)
-- `/internal/tui/app.go` - Header/footer rendering (fixed for projects view)
-
-**Working Reference (Projects List View):**
-- `/internal/tui/views/projects.go` - Uses lipgloss built-in `RoundedBorder()` correctly. This view does NOT have the rendering issues and can serve as a reference for how to fix workspace.go.
+- `/internal/tui/app.go` - Header/footer rendering
+- `/internal/cli/tui.go` - Added termenv background color setup
 
 ### Technical Context
 
@@ -2929,7 +2914,9 @@ Styled text: "\e[36m╭\e[0m"
 - Byte length: 11 bytes (1B 5B 33 36 6D E2 95 AD 1B 5B 30 6D)
 ```
 
-### Issue 3: Terminal Background Bleed (RESOLVED)
+### Issue 3: Terminal Background Bleed ✅ RESOLVED
+
+**Fixed in:** commit `64d8eb7` (January 11, 2026)
 
 **Symptoms:**
 - Empty terminal cells (areas without content) show the terminal's default background color instead of the app's background color
