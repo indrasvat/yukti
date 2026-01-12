@@ -305,6 +305,16 @@ func (ft *FileTree) SelectedFile() *project.File {
 	return nil
 }
 
+// GetFiles returns the filtered list of files.
+func (ft *FileTree) GetFiles() []project.File {
+	return ft.filtered
+}
+
+// GetSelectedIndex returns the index of the currently selected file.
+func (ft *FileTree) GetSelectedIndex() int {
+	return ft.selected
+}
+
 // ShortHelp returns help bindings.
 func (ft *FileTree) ShortHelp() []key.Binding {
 	return []key.Binding{
