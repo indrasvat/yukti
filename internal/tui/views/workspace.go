@@ -341,7 +341,8 @@ func (v *WorkspaceView) getLeftPaneWidth() int {
 
 // getRightPaneWidth returns the width of the right pane.
 func (v *WorkspaceView) getRightPaneWidth() int {
-	return v.width - v.getLeftPaneWidth() - 3 // 3 for separator
+	// Subtract extra 1 to ensure right border doesn't get cut off
+	return v.width - v.getLeftPaneWidth() - 4
 }
 
 // View implements tea.Model.
@@ -441,7 +442,7 @@ func (v *WorkspaceView) renderWorkspace() string {
 	leftTopBorder := v.buildTitleBorder(leftTitle, leftInfo, leftWidth-2, leftBorder)
 
 	leftPaneStyle := lipgloss.NewStyle().
-		Width(leftWidth - 2).
+		Width(leftWidth - 4). // -4 to leave room for vertical borders on each side
 		Height(contentHeight - 2)
 
 	leftContent := leftPaneStyle.Render(v.fileTree.View())
@@ -469,7 +470,7 @@ func (v *WorkspaceView) renderWorkspace() string {
 
 	rightTopBorder := v.buildTitleBorder(rightTitle, "", rightWidth-2, rightBorder)
 	rightPaneStyle := lipgloss.NewStyle().
-		Width(rightWidth - 2).
+		Width(rightWidth - 4). // -4 to leave room for vertical borders on each side
 		Height(contentHeight - 2)
 
 	rightContentStyled := rightPaneStyle.Render(rightContent)
@@ -542,7 +543,7 @@ func (v *WorkspaceView) renderPanelWithTitle(topBorder, content string, height, 
 
 	var result strings.Builder
 	result.WriteString(topBorder)
-	result.WriteString("\n")
+	result.WriteString("\033[0m\n") // Reset after top border
 
 	// Content lines
 	contentHeight := height - 2
@@ -553,13 +554,19 @@ func (v *WorkspaceView) renderPanelWithTitle(topBorder, content string, height, 
 		}
 
 		// Ensure line fits the exact width needed
+		// Use plain spaces for padding to avoid ANSI background issues
 		lineWidth := lipgloss.Width(line)
+		padding := ""
 		if lineWidth < width-2 {
-			line += lipgloss.NewStyle().Width(width - 2 - lineWidth).Render("")
+			padding = strings.Repeat(" ", width-2-lineWidth)
 		}
 
+		// Add ANSI reset before border to ensure clean state
+		result.WriteString("\033[0m")
 		result.WriteString(verticalBorder)
 		result.WriteString(line)
+		result.WriteString(padding)
+		result.WriteString("\033[0m")
 		result.WriteString(verticalBorder)
 		result.WriteString("\n")
 	}

@@ -54,7 +54,6 @@ func NewFileTree(files []project.File) *FileTree {
 		itemStyle: lipgloss.NewStyle().
 			Padding(0, 1),
 		selectedStyle: lipgloss.NewStyle().
-			Background(styles.Surface).
 			Foreground(styles.Primary).
 			Bold(true).
 			Padding(0, 1),

@@ -126,13 +126,9 @@ func (v *CodeViewerView) View() string {
 	lines := strings.Count(v.file.Source, "\n") + 1
 	info := fmt.Sprintf("%s • %d lines", fileTypeLabel(v.file.Type), lines)
 
-	// Add function info if available
+	// Add function count (don't list all functions to avoid header wrapping)
 	if v.file.FunctionSet != nil && len(v.file.FunctionSet.Functions) > 0 {
-		funcs := make([]string, 0, len(v.file.FunctionSet.Functions))
-		for _, fn := range v.file.FunctionSet.Functions {
-			funcs = append(funcs, fn.Name+"()")
-		}
-		info += fmt.Sprintf(" • Functions: %s", strings.Join(funcs, ", "))
+		info += fmt.Sprintf(" • %d functions", len(v.file.FunctionSet.Functions))
 	}
 
 	header := infoStyle.Render(info)
@@ -181,12 +177,13 @@ func (v *CodeViewerView) highlightCode() string {
 	lexer = chroma.Coalesce(lexer)
 
 	// Use a dark theme that works well in terminal
-	style := styles.Get("catppuccin-mocha")
+	// Note: Using "native" style which has no background color to avoid bleed
+	style := styles.Get("native")
 	if style == nil {
 		style = styles.Fallback
 	}
 
-	// Format with ANSI colors for terminal
+	// Format with ANSI colors for terminal (terminal256 for better colors)
 	formatter := formatters.Get("terminal256")
 	if formatter == nil {
 		formatter = formatters.Fallback
