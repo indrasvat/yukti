@@ -428,13 +428,12 @@ func (v *WorkspaceView) renderWorkspace() string {
 	leftTitleStyle := lipgloss.NewStyle().Foreground(leftTitleColor).Bold(true)
 	rightTitleStyle := lipgloss.NewStyle().Foreground(rightTitleColor).Bold(true)
 
-	// File count info
+	// File count info (plain text, styled in buildTitleBorder)
 	fileCount := len(v.fileTree.GetFiles())
 	selectedIdx := v.fileTree.GetSelectedIndex()
 	leftInfo := ""
 	if fileCount > 0 {
-		leftInfo = lipgloss.NewStyle().Foreground(styles.TextMuted).
-			Render(fmt.Sprintf("%d of %d", selectedIdx+1, fileCount))
+		leftInfo = fmt.Sprintf("%d of %d", selectedIdx+1, fileCount)
 	}
 
 	// Build left panel with custom title border

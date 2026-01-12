@@ -23,7 +23,7 @@ var (
 // Component styles for layout elements.
 var (
 	HeaderStyle = lipgloss.NewStyle().
-			Background(Surface).
+			Background(Background).
 			Foreground(TextPrimary).
 			Padding(0, 2).
 			BorderStyle(lipgloss.NormalBorder()).
@@ -31,7 +31,7 @@ var (
 			BorderForeground(Border)
 
 	FooterStyle = lipgloss.NewStyle().
-			Background(Surface).
+			Background(Background).
 			Foreground(TextMuted).
 			Padding(0, 2).
 			BorderStyle(lipgloss.NormalBorder()).
