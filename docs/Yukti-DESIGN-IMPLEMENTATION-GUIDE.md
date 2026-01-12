@@ -2929,6 +2929,72 @@ Styled text: "\e[36m╭\e[0m"
 - Byte length: 11 bytes (1B 5B 33 36 6D E2 95 AD 1B 5B 30 6D)
 ```
 
+### Issue 3: Terminal Background Bleed (RESOLVED)
+
+**Symptoms:**
+- Empty terminal cells (areas without content) show the terminal's default background color instead of the app's background color
+- Visible on ALL screens: welcome, projects list, workspace
+- Creates a two-tone appearance where rendered content has lighter background (#1E1E2E) and empty space has darker terminal default
+
+**Root Cause Analysis:**
+
+In terminal emulators:
+- Each cell has a character and attributes (foreground color, background color)
+- "Empty" cells (cells with no character) use the terminal's **default background**
+- ANSI escape codes can set background for **rendered characters** but NOT for empty cells
+- Lipgloss's `Background()` only applies to characters that are explicitly rendered
+
+When our TUI renders content:
+1. Header, content, footer are rendered with styled characters
+2. Any trailing space on lines or empty lines below content are "empty cells"
+3. These empty cells use the terminal's default background, not our app's background
+
+**Why Various Fixes Failed:**
+
+1. **Padding lines with styled spaces** - Lipgloss's `Background()` should apply to spaces, but inconsistent terminal handling caused issues
+2. **Using `lipgloss.Place()` with `WithWhitespaceBackground()`** - Same fundamental problem
+3. **Raw ANSI escape codes for padding** - Still didn't fill all empty cells
+
+**The Solution: termenv.SetBackgroundColor()**
+
+The `termenv` library (already a dependency via BubbleTea) provides `SetBackgroundColor()` which sets the terminal's **default background color** via OSC 11 escape sequence.
+
+**Implementation (cli/tui.go):**
+```go
+import "github.com/muesli/termenv"
+
+func runWithViewAndOpts(view tui.View, opts tui.AppOptions, projectRepo project.Repository) {
+    // Set terminal background color to our app's background color.
+    // This ensures empty cells (not explicitly styled) use our background.
+    output := termenv.NewOutput(os.Stdout)
+    output.SetBackgroundColor(output.Color(string(styles.Background)))
+
+    app := tui.NewApp(view, opts, projectRepo)
+    p := tea.NewProgram(app, tea.WithAltScreen())
+
+    _, err := p.Run()
+
+    // Reset terminal colors after TUI exits
+    output.Reset()
+
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)
+    }
+}
+```
+
+**Why This Works:**
+- OSC 11 (`\033]11;#RRGGBB\007`) changes the terminal's default background color
+- ALL empty cells now use our app's background color
+- The change is reset when the app exits via `output.Reset()`
+- BubbleTea's alternate screen mode ensures the main terminal isn't affected after exit
+
+**References:**
+- [BubbleTea Issue #207: Set terminal background color](https://github.com/charmbracelet/bubbletea/issues/207)
+- [BubbleTea PR #1085: Query and set terminal colors](https://github.com/charmbracelet/bubbletea/pull/1085)
+- [termenv package documentation](https://pkg.go.dev/github.com/muesli/termenv)
+
 ---
 
 ## UI Mockups

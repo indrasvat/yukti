@@ -358,35 +358,15 @@ func (a *App) navigateToProjects() tea.Cmd {
 	return nil
 }
 
-// renderFullScreen renders content onto a fixed-size screen with consistent background.
-// Every line is padded to full width with explicit space characters that have background
-// styling applied. This ensures the terminal has no empty cells that would show the
-// default terminal background.
+// renderFullScreen places content on a fixed-size canvas.
+// The terminal's background color is set via termenv in cli/tui.go,
+// so empty cells use our app's background color automatically.
 func renderFullScreen(content string, width, height int) string {
-	// Background style for padding spaces - no Width() needed, we use explicit spaces
-	bgStyle := lipgloss.NewStyle().Background(styles.Background)
-
-	lines := strings.Split(content, "\n")
-	output := make([]string, height)
-
-	for i := range height {
-		var line string
-		if i < len(lines) {
-			line = lines[i]
-		}
-
-		// Measure display width (handles ANSI codes correctly)
-		lineWidth := lipgloss.Width(line)
-
-		if lineWidth < width {
-			// Create explicit space characters with background styling
-			paddingCount := width - lineWidth
-			paddingSpaces := strings.Repeat(" ", paddingCount)
-			output[i] = line + bgStyle.Render(paddingSpaces)
-		} else {
-			output[i] = line
-		}
-	}
-
-	return strings.Join(output, "\n")
+	return lipgloss.Place(
+		width,
+		height,
+		lipgloss.Left,
+		lipgloss.Top,
+		content,
+	)
 }

@@ -7,12 +7,14 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/muesli/termenv"
 
 	"yukti/internal/domain/project"
 	"yukti/internal/infrastructure/cache"
 	"yukti/internal/infrastructure/google"
 	"yukti/internal/infrastructure/keychain"
 	"yukti/internal/tui"
+	"yukti/internal/tui/styles"
 	"yukti/internal/tui/views"
 )
 
@@ -80,10 +82,20 @@ func runTUI() {
 
 // runWithViewAndOpts runs the TUI application with the given initial view and options.
 func runWithViewAndOpts(view tui.View, opts tui.AppOptions, projectRepo project.Repository) {
+	// Set terminal background color to our app's background color.
+	// This ensures empty cells (not explicitly styled) use our background.
+	output := termenv.NewOutput(os.Stdout)
+	output.SetBackgroundColor(output.Color(string(styles.Background)))
+
 	app := tui.NewApp(view, opts, projectRepo)
 	p := tea.NewProgram(app, tea.WithAltScreen())
 
-	if _, err := p.Run(); err != nil {
+	_, err := p.Run()
+
+	// Reset terminal colors after TUI exits (before potential os.Exit)
+	output.Reset()
+
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
