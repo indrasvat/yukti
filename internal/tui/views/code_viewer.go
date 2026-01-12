@@ -37,6 +37,11 @@ func NewCodeViewerView(file project.File) *CodeViewerView {
 	}
 }
 
+// GetFileName returns the name of the file being viewed.
+func (v *CodeViewerView) GetFileName() string {
+	return v.file.Name
+}
+
 // Title implements tui.View.
 func (v *CodeViewerView) Title() string {
 	return v.file.Name
