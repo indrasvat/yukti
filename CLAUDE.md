@@ -92,6 +92,87 @@ Google returns `oauth2: "invalid_request" "client_secret is missing."` without i
 2. Use AdaptiveColor for light/dark themes
 3. Calculate widths dynamically from terminal size
 
+### Terminal Background Color (Critical for Custom Themes)
+
+**Problem:** When using a custom background color (e.g., Catppuccin Mocha's `#1E1E2E`), empty terminal cells show the terminal's default background instead of the app's background. This creates a "two-tone" appearance with content areas having the correct background and empty areas (trailing space, lines below content) having the terminal's darker default.
+
+**Why lipgloss Background() doesn't work:**
+- `lipgloss.Background()` only applies to **explicitly rendered characters**
+- Empty terminal cells have NO characters, so they use the terminal's default background
+- Padding with styled spaces doesn't reliably fill all empty cells
+- `lipgloss.Place()` with `WithWhitespaceBackground()` has the same limitation
+
+**The Solution: termenv.SetBackgroundColor()**
+
+Use the `termenv` library (already a BubbleTea dependency) to set the terminal's default background color via OSC 11 escape sequence:
+
+```go
+import (
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/muesli/termenv"
+)
+
+func runTUI() {
+    // Set terminal background BEFORE starting BubbleTea
+    output := termenv.NewOutput(os.Stdout)
+    output.SetBackgroundColor(output.Color("#1E1E2E"))  // Your app's background
+
+    app := NewApp()
+    p := tea.NewProgram(app, tea.WithAltScreen())
+
+    _, err := p.Run()
+
+    // Reset terminal colors AFTER TUI exits (before any os.Exit)
+    output.Reset()
+
+    if err != nil {
+        os.Exit(1)
+    }
+}
+```
+
+**Why this works:**
+- OSC 11 (`\033]11;#RRGGBB\007`) changes the terminal's **default** background
+- ALL cells (including empty ones) now use your app's background
+- `output.Reset()` restores original colors when app exits
+- BubbleTea's alternate screen mode keeps main terminal unaffected
+
+**Important notes:**
+- Call `output.Reset()` BEFORE `os.Exit()` (defer won't run after os.Exit)
+- Works with iTerm2, Terminal.app, Alacritty, Kitty, and most modern terminals
+- The color string format should match lipgloss.Color (e.g., `"#1E1E2E"`)
+
+**References:**
+- [BubbleTea Issue #207](https://github.com/charmbracelet/bubbletea/issues/207)
+- [termenv docs](https://pkg.go.dev/github.com/muesli/termenv)
+
+### Custom Panel Borders with Embedded Titles
+
+**Problem:** Building custom borders with embedded title text (like `╭─Title────╮`) causes ANSI escape code conflicts when the title is pre-styled.
+
+**Root cause:** Each styled text segment ends with `\e[0m` (reset), which kills subsequent border styling:
+```
+\e[36m╭\e[0m\e[1;35mTitle\e[0m\e[36m────╮\e[0m
+           ↑ This reset breaks the following border chars
+```
+
+**Solutions (in order of preference):**
+
+1. **Use lipgloss's built-in borders** - Let lipgloss handle border rendering:
+   ```go
+   style := lipgloss.NewStyle().
+       BorderStyle(lipgloss.RoundedBorder()).
+       BorderForeground(borderColor)
+   ```
+
+2. **Separate title from border** - Render title as a row above the bordered panel
+
+3. **Build border with plain text first** - Apply styling only at the final step:
+   ```go
+   border := "╭" + title + strings.Repeat("─", padding) + "╮"
+   return borderStyle.Render(border)  // Style entire string at once
+   ```
+
 ## Bug Fixes
 
 ### Linting Issues (Phase 1)
@@ -292,6 +373,7 @@ Key dependencies:
 - `github.com/charmbracelet/bubbletea` - TUI framework
 - `github.com/charmbracelet/lipgloss` - Styling
 - `github.com/charmbracelet/bubbles` - TUI components
+- `github.com/muesli/termenv` - Terminal environment detection and manipulation (used for setting terminal background color)
 - `github.com/spf13/cobra` - CLI framework
 - `golang.org/x/oauth2` - OAuth2 with PKCE
 - `github.com/keybase/go-keychain` - macOS Keychain (darwin only)
