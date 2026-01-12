@@ -228,6 +228,8 @@ func (v *CodeViewerView) addLineNumbers(source string) string {
 
 	var result strings.Builder
 	for i, line := range lines {
+		// Reset ANSI at start of each line to prevent bleed from previous line
+		result.WriteString("\033[0m")
 		lineNum := lineNumStyle.Render(fmt.Sprintf("%d", i+1))
 		result.WriteString(lineNum)
 		result.WriteString(separatorStyled)
@@ -237,6 +239,8 @@ func (v *CodeViewerView) addLineNumbers(source string) string {
 			line = truncateCode(line, availableCodeWidth)
 		}
 		result.WriteString(line)
+		// Reset ANSI at end of line to prevent bleed to next line
+		result.WriteString("\033[0m")
 		if i < len(lines)-1 {
 			result.WriteString("\n")
 		}

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -103,6 +104,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
+		// Adjust the message for views: subtract header (3) and footer (3) heights
+		// so views render to the content area, not the full terminal
+		msg.Height = max(1, msg.Height-6)
 
 	case ToastMsg:
 		a.toast = msg.Message
@@ -195,17 +199,21 @@ func (a *App) View() string {
 
 	contentHeight = max(1, contentHeight)
 
-	// Build layout
+	// Build layout components
 	header := a.renderHeader()
 	content := a.renderContent(contentHeight)
 	footer := a.renderFooter()
 
-	return lipgloss.JoinVertical(
+	// Compose the full view
+	view := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
 		content,
 		footer,
 	)
+
+	// Render the view onto a fixed-size canvas with explicit background on every cell
+	return renderFullScreen(view, a.width, a.height)
 }
 
 // renderHeader renders the top navigation bar.
@@ -253,7 +261,11 @@ func (a *App) renderHeader() string {
 
 	spacing = max(1, spacing)
 
-	spacer := lipgloss.NewStyle().Width(spacing).Render("")
+	// Spacer must have background color to prevent bleed
+	spacer := lipgloss.NewStyle().
+		Width(spacing).
+		Background(styles.Background).
+		Render(strings.Repeat(" ", spacing))
 	headerContent := leftContent + spacer + authStatus
 
 	return styles.HeaderStyle.
@@ -262,13 +274,8 @@ func (a *App) renderHeader() string {
 }
 
 // renderContent renders the main content area.
-func (a *App) renderContent(height int) string {
-	contentStyle := lipgloss.NewStyle().
-		Width(a.width).
-		Height(height).
-		Background(styles.Background)
-
-	return contentStyle.Render(a.router.Current().View())
+func (a *App) renderContent(_ int) string {
+	return a.router.Current().View()
 }
 
 // renderFooter renders the bottom help bar.
@@ -349,4 +356,37 @@ func (a *App) navigateToProjects() tea.Cmd {
 		return Navigate(view)
 	}
 	return nil
+}
+
+// renderFullScreen renders content onto a fixed-size screen with consistent background.
+// Every line is padded to full width with explicit space characters that have background
+// styling applied. This ensures the terminal has no empty cells that would show the
+// default terminal background.
+func renderFullScreen(content string, width, height int) string {
+	// Background style for padding spaces - no Width() needed, we use explicit spaces
+	bgStyle := lipgloss.NewStyle().Background(styles.Background)
+
+	lines := strings.Split(content, "\n")
+	output := make([]string, height)
+
+	for i := range height {
+		var line string
+		if i < len(lines) {
+			line = lines[i]
+		}
+
+		// Measure display width (handles ANSI codes correctly)
+		lineWidth := lipgloss.Width(line)
+
+		if lineWidth < width {
+			// Create explicit space characters with background styling
+			paddingCount := width - lineWidth
+			paddingSpaces := strings.Repeat(" ", paddingCount)
+			output[i] = line + bgStyle.Render(paddingSpaces)
+		} else {
+			output[i] = line
+		}
+	}
+
+	return strings.Join(output, "\n")
 }
