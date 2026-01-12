@@ -494,13 +494,14 @@ func (v *WorkspaceView) renderWorkspace() string {
 }
 
 // buildTitleBorder creates a top border with embedded title and optional info.
+// IMPORTANT: Styles each segment separately to avoid nested ANSI code issues.
 func (v *WorkspaceView) buildTitleBorder(title, info string, width int, borderColor lipgloss.Color) string {
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	infoStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
 
-	// Unicode box drawing
-	topLeft := "╭"
-	topRight := "╮"
+	// Unicode box drawing - style each border character separately
+	topLeft := borderStyle.Render("╭")
+	topRight := borderStyle.Render("╮")
 	horizontal := "─"
 
 	titleWidth := lipgloss.Width(title)
@@ -510,31 +511,38 @@ func (v *WorkspaceView) buildTitleBorder(title, info string, width int, borderCo
 	// Therefore: dashes = width - 2 - titleWidth - infoWidth
 	dashCount := width - 2 - titleWidth - infoWidth
 	dashCount = max(0, dashCount)
-	dashes := strings.Repeat(horizontal, dashCount)
+	dashes := borderStyle.Render(strings.Repeat(horizontal, dashCount))
 
-	// Build border: ╭title────info╮
-	border := topLeft + title + dashes
+	// Build border by concatenating pre-styled segments (no nesting)
+	// title is already styled by caller
+	var result strings.Builder
+	result.WriteString(topLeft)
+	result.WriteString(title)
+	result.WriteString(dashes)
 	if info != "" {
-		border += infoStyle.Render(info)
+		result.WriteString(infoStyle.Render(info))
 	}
-	border += topRight
+	result.WriteString(topRight)
 
-	return borderStyle.Render(border)
+	return result.String()
 }
 
 // renderPanelWithTitle renders a panel with custom title border.
+// IMPORTANT: Styles each border element separately to avoid nested ANSI code issues.
 func (v *WorkspaceView) renderPanelWithTitle(topBorder, content string, height, width int, borderColor lipgloss.Color) string {
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 
-	vertical := "│"
-	bottomLeft := "╰"
-	bottomRight := "╯"
+	// Pre-style border elements
+	verticalBorder := borderStyle.Render("│")
+	bottomLeft := borderStyle.Render("╰")
+	bottomRight := borderStyle.Render("╯")
 	horizontal := "─"
 
 	lines := splitIntoLines(content)
 
-	var result string
-	result += topBorder + "\n"
+	var result strings.Builder
+	result.WriteString(topBorder)
+	result.WriteString("\n")
 
 	// Content lines
 	contentHeight := height - 2
@@ -544,24 +552,24 @@ func (v *WorkspaceView) renderPanelWithTitle(topBorder, content string, height, 
 			line = lines[i]
 		}
 
-		// Ensure line fits
+		// Ensure line fits the exact width needed
 		lineWidth := lipgloss.Width(line)
 		if lineWidth < width-2 {
 			line += lipgloss.NewStyle().Width(width - 2 - lineWidth).Render("")
 		}
 
-		result += borderStyle.Render(vertical) + line + borderStyle.Render(vertical) + "\n"
+		result.WriteString(verticalBorder)
+		result.WriteString(line)
+		result.WriteString(verticalBorder)
+		result.WriteString("\n")
 	}
 
-	// Bottom border
-	bottom := bottomLeft
-	for range width - 2 {
-		bottom += horizontal
-	}
-	bottom += bottomRight
-	result += borderStyle.Render(bottom)
+	// Bottom border - style separately
+	result.WriteString(bottomLeft)
+	result.WriteString(borderStyle.Render(strings.Repeat(horizontal, width-2)))
+	result.WriteString(bottomRight)
 
-	return result
+	return result.String()
 }
 
 // splitIntoLines splits content into lines.

@@ -88,8 +88,7 @@ func (v *CodeViewerView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if !v.ready {
 			v.viewport = viewport.New(v.width, viewportHeight)
-			v.viewport.Style = lipgloss.NewStyle().
-				Background(tuiStyles.Background)
+			// No background - let the parent container handle it
 			v.ready = true
 			v.content = v.highlightCode()
 			v.viewport.SetContent(v.content)
