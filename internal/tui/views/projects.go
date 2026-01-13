@@ -315,6 +315,7 @@ func (v *ProjectsView) View() string {
 	}
 
 	// Overlay help modal if visible
+	// No Place() needed - renderList() already fills v.height using Height() style
 	if v.help.IsVisible() {
 		view = v.overlayModal(view, v.help.View())
 	}
@@ -483,7 +484,11 @@ func (v *ProjectsView) renderList() string {
 			"",
 			noMatchStyle.Render("No projects match your filter"),
 		)
-		return lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
+		return lipgloss.NewStyle().
+			Padding(1, 3).
+			Width(v.width).
+			Height(v.height).
+			Render(noMatchContent)
 	}
 
 	// Calculate visible projects
@@ -516,12 +521,16 @@ func (v *ProjectsView) renderList() string {
 		scrollIndicator,
 	)
 
-	// Add padding
-	paddedContent := lipgloss.NewStyle().
+	// Apply padding and fixed height to fill the available space.
+	// Using Height() (like workspace panels) ensures the background has enough
+	// lines for modal overlay, without using Place() which conflicts with app.go.
+	styledContent := lipgloss.NewStyle().
 		Padding(1, 3).
+		Width(v.width).
+		Height(v.height).
 		Render(content)
 
-	return paddedContent
+	return styledContent
 }
 
 func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) string {
