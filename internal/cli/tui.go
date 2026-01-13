@@ -12,6 +12,7 @@ import (
 	appprocess "yukti/internal/application/process"
 	"yukti/internal/domain/project"
 	"yukti/internal/infrastructure/cache"
+	"yukti/internal/infrastructure/config"
 	"yukti/internal/infrastructure/google"
 	"yukti/internal/infrastructure/keychain"
 	"yukti/internal/tui"
@@ -66,9 +67,19 @@ func runTUI() {
 		googleRepo := google.NewProjectRepository(apiClient)
 		projectRepo := cache.NewCachingRepository(googleRepo)
 
+		// Create Cloud Logging service for console.log viewing
+		loggingService := google.NewCloudLoggingService(ctx, tokenSource, logger)
+
+		// Get GCP project number (try config override first, then derive from client ID)
+		var gcpProjectOverride string
+		if cfg, err := config.Load(); err == nil && cfg.GCPProject != "" {
+			gcpProjectOverride = cfg.GCPProject
+		}
+		gcpProjectNum := auth.GetGCPProjectNumber(gcpProjectOverride)
+
 		// Create script runner and process service for function execution
 		scriptRunner := google.NewScriptRunner(apiClient)
-		processService := appprocess.NewService(scriptRunner)
+		processService := appprocess.NewService(scriptRunner, loggingService, gcpProjectNum)
 
 		// Show welcome view with repository and process service available
 		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
