@@ -197,8 +197,15 @@ func (v *WorkspaceView) handleModals(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 	// Handle log path info modal
 	if v.showLogPath {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			_ = keyMsg // Any key dismisses
-			v.showLogPath = false
+			switch keyMsg.String() {
+			case "O":
+				// Open log directory, then close modal
+				v.openLogDirectory()
+				v.showLogPath = false
+			default:
+				// Any other key just closes the modal
+				v.showLogPath = false
+			}
 			return true, nil
 		}
 		return true, nil
@@ -925,21 +932,18 @@ func (v *WorkspaceView) openLogDirectory() {
 func (v *WorkspaceView) renderLogPathModal() string {
 	logPath := logger.Path()
 
-	// Styles - all with explicit Surface background to prevent bleed
+	// Styles - no Background on inner elements (container provides Surface)
 	titleStyle := lipgloss.NewStyle().
 		Foreground(styles.Primary).
-		Background(styles.Surface).
 		Bold(true).
 		MarginBottom(1)
 
 	pathStyle := lipgloss.NewStyle().
 		Foreground(styles.Info).
-		Background(styles.Surface).
 		Bold(true)
 
 	hintStyle := lipgloss.NewStyle().
 		Foreground(styles.TextMuted).
-		Background(styles.Surface).
 		Italic(true).
 		MarginTop(1)
 
