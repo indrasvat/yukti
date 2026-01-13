@@ -318,14 +318,27 @@ func getStatusText(status process.Status) string {
 }
 
 // getSecondLine returns the detail line for an entry (result/error/running message).
-func getSecondLine(entry appprocess.ExecutionEntry) string {
+// It pads the line to fill the full width with background color to prevent bleed.
+func (e *ExecutionLog) getSecondLine(entry appprocess.ExecutionEntry, width int) string {
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+	bgStyle := lipgloss.NewStyle().Background(styles.Background)
+
+	// Helper to pad line to full width
+	padLine := func(line string) string {
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < width {
+			padding := width - lineWidth
+			line += bgStyle.Render(strings.Repeat(" ", padding))
+		}
+		return line
+	}
 
 	switch {
 	case entry.Status == process.StatusCompleted && entry.Result != nil:
 		resultStyle := lipgloss.NewStyle().Foreground(styles.Success)
 		result := appprocess.FormatResultCompact(entry.Result)
-		return "\n    " + mutedStyle.Render("└─ Returned: ") + resultStyle.Render(result)
+		line := "    " + mutedStyle.Render("└─ Returned: ") + resultStyle.Render(result)
+		return "\n" + padLine(line)
 
 	case entry.Status == process.StatusFailed && entry.Error != "":
 		errStyle := lipgloss.NewStyle().Foreground(styles.Error)
@@ -333,10 +346,12 @@ func getSecondLine(entry appprocess.ExecutionEntry) string {
 		if len(errMsg) > 60 {
 			errMsg = errMsg[:57] + "..."
 		}
-		return "\n    " + mutedStyle.Render("└─ Error: ") + errStyle.Render(errMsg)
+		line := "    " + mutedStyle.Render("└─ Error: ") + errStyle.Render(errMsg)
+		return "\n" + padLine(line)
 
 	case entry.Status == process.StatusRunning:
-		return "\n    " + mutedStyle.Render("└─ Executing function in Google Apps Script...")
+		line := "    " + mutedStyle.Render("└─ Executing function in Google Apps Script...")
+		return "\n" + padLine(line)
 
 	default:
 		return ""
@@ -375,8 +390,8 @@ func (e *ExecutionLog) renderEntry(entry appprocess.ExecutionEntry, selected boo
 	spacing := max(1, width-lipgloss.Width(line)-lipgloss.Width(rightPart)-2)
 	fullLine := line + strings.Repeat(" ", spacing) + rightPart
 
-	// Add detail line (result/error/running message)
-	secondLine := getSecondLine(entry)
+	// Add detail line (result/error/running message), padded to full width
+	secondLine := e.getSecondLine(entry, width)
 
 	if selected && e.focused {
 		highlightStyle := lipgloss.NewStyle().Background(styles.Surface)
