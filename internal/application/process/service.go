@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +16,9 @@ import (
 
 // Service manages script execution and tracks execution history.
 type Service struct {
-	runner *google.ScriptRunner
+	runner         *google.ScriptRunner
+	loggingService *google.CloudLoggingService
+	gcpProjectNum  string // GCP project number for Cloud Logging API
 
 	// In-memory execution history (per script)
 	mu         sync.RWMutex
@@ -33,14 +36,22 @@ type ExecutionEntry struct {
 	Result       any    // Return value or nil
 	Error        string // Error message if failed
 	ScriptID     string
+
+	// Console log entries (lazy loaded via Cloud Logging API)
+	Logs         []google.LogEntry
+	LogsLoaded   bool   // Whether logs have been fetched
+	LogsError    string // Error message if log fetching failed
+	LogsExpanded bool   // Whether logs are expanded in UI
 }
 
 // NewService creates a new process service.
-func NewService(runner *google.ScriptRunner) *Service {
+func NewService(runner *google.ScriptRunner, loggingService *google.CloudLoggingService, gcpProjectNum string) *Service {
 	return &Service{
-		runner:     runner,
-		executions: make(map[string][]ExecutionEntry),
-		maxEntries: 50,
+		runner:         runner,
+		loggingService: loggingService,
+		gcpProjectNum:  gcpProjectNum,
+		executions:     make(map[string][]ExecutionEntry),
+		maxEntries:     50,
 	}
 }
 
@@ -116,6 +127,127 @@ func (s *Service) GetRecentExecutions(scriptID string, limit int) []ExecutionEnt
 	return result
 }
 
+// FetchLogsForEntry fetches console logs for an execution entry from Cloud Logging API.
+// It updates the entry in-place with the fetched logs.
+func (s *Service) FetchLogsForEntry(ctx context.Context, entry *ExecutionEntry, limit int) error {
+	if s.loggingService == nil {
+		entry.LogsError = "Cloud Logging not configured"
+		return nil
+	}
+
+	if s.gcpProjectNum == "" {
+		entry.LogsError = "GCP project not configured"
+		return nil
+	}
+
+	// Determine time range for log query
+	// Fetch logs from (startTime - 1s) to (startTime + duration + 1s)
+	startTime := entry.StartTime.Add(-1 * time.Second)
+	endTime := entry.StartTime.Add(entry.Duration + 1*time.Second)
+
+	// If still running, use current time
+	if entry.Status == process.StatusRunning {
+		endTime = time.Now().Add(1 * time.Second)
+	}
+
+	pageSize := limit
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+
+	req := google.FetchLogsRequest{
+		GCPProjectNumber: s.gcpProjectNum,
+		FunctionName:     entry.FunctionName,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		PageSize:         pageSize,
+	}
+
+	resp, err := s.loggingService.FetchLogs(ctx, req)
+	if err != nil {
+		entry.LogsError = err.Error()
+		entry.LogsLoaded = true
+		logger.Error("Failed to fetch logs for %s: %s", entry.FunctionName, err.Error())
+		return nil // Don't fail the whole operation, just mark error
+	}
+
+	entry.Logs = resp.Entries
+	entry.LogsLoaded = true
+	entry.LogsError = ""
+
+	logger.Info("Fetched %d logs for %s", len(resp.Entries), entry.FunctionName)
+	return nil
+}
+
+// FetchAllLogsForEntry fetches all console logs with pagination.
+func (s *Service) FetchAllLogsForEntry(ctx context.Context, entry *ExecutionEntry) error {
+	if s.loggingService == nil {
+		entry.LogsError = "Cloud Logging not configured"
+		return nil
+	}
+
+	if s.gcpProjectNum == "" {
+		entry.LogsError = "GCP project not configured"
+		return nil
+	}
+
+	startTime := entry.StartTime.Add(-1 * time.Second)
+	endTime := entry.StartTime.Add(entry.Duration + 1*time.Second)
+
+	if entry.Status == process.StatusRunning {
+		endTime = time.Now().Add(1 * time.Second)
+	}
+
+	req := google.FetchLogsRequest{
+		GCPProjectNumber: s.gcpProjectNum,
+		FunctionName:     entry.FunctionName,
+		StartTime:        startTime,
+		EndTime:          endTime,
+	}
+
+	logs, err := s.loggingService.FetchAllLogs(ctx, req)
+	if err != nil {
+		entry.LogsError = err.Error()
+		entry.LogsLoaded = true
+		return nil //nolint:nilerr // Intentionally return nil - error is stored in entry for UI display
+	}
+
+	entry.Logs = logs
+	entry.LogsLoaded = true
+	entry.LogsError = ""
+
+	return nil
+}
+
+// ToggleLogsExpanded toggles the log expansion state for an entry.
+func (s *Service) ToggleLogsExpanded(scriptID, entryID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entries := s.executions[scriptID]
+	for i := range entries {
+		if entries[i].ID == entryID {
+			entries[i].LogsExpanded = !entries[i].LogsExpanded
+			s.executions[scriptID] = entries
+			return
+		}
+	}
+}
+
+// GetEntryByID returns an execution entry by ID.
+func (s *Service) GetEntryByID(scriptID, entryID string) *ExecutionEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	entries := s.executions[scriptID]
+	for i := range entries {
+		if entries[i].ID == entryID {
+			return &entries[i]
+		}
+	}
+	return nil
+}
+
 // addEntry adds a new entry to the history.
 func (s *Service) addEntry(scriptID string, entry ExecutionEntry) {
 	s.mu.Lock()
@@ -148,23 +280,82 @@ func (s *Service) updateEntry(scriptID, entryID string, updated ExecutionEntry) 
 }
 
 // formatScriptError formats a script execution error for display.
+// It categorizes common GAS errors and provides user-friendly messages.
 func formatScriptError(err *google.ExecutionError) string {
 	if err == nil {
 		return ""
 	}
 
+	// Check for common GAS error patterns by status/code
+	if msg := formatErrorByStatusCode(err); msg != "" {
+		return msg
+	}
+
+	// Check for specific error messages in the message field
+	if msg := formatErrorByMessage(err.Message); msg != "" {
+		return msg
+	}
+
 	// Try to get detailed error message from details
-	for _, detail := range err.Details {
-		if detail.ErrorMessage != "" {
-			msg := detail.ErrorMessage
-			if detail.ErrorType != "" {
-				msg = detail.ErrorType + ": " + msg
-			}
-			return msg
-		}
+	if msg := formatErrorFromDetails(err.Details); msg != "" {
+		return msg
 	}
 
 	return err.Message
+}
+
+// formatErrorByStatusCode returns a user-friendly message based on HTTP status codes.
+func formatErrorByStatusCode(err *google.ExecutionError) string {
+	switch {
+	case err.Status == "PERMISSION_DENIED" || err.Code == 403:
+		return "Script needs additional permissions - run in browser first"
+	case err.Status == "UNAUTHENTICATED" || err.Code == 401:
+		return "Re-authenticate: yukti logout && yukti login"
+	case err.Status == "DEADLINE_EXCEEDED" || err.Code == 504:
+		return "Execution timed out (6 min limit)"
+	case err.Status == "NOT_FOUND" || err.Code == 404:
+		return "Script not found - ensure script is linked to the same GCP project as your OAuth credentials"
+	case err.Status == "RESOURCE_EXHAUSTED" || err.Code == 429:
+		return "Rate limit exceeded - try again in a moment"
+	default:
+		return ""
+	}
+}
+
+// formatErrorByMessage returns a user-friendly message based on error message content.
+func formatErrorByMessage(message string) string {
+	msg := strings.ToLower(message)
+	switch {
+	case strings.Contains(msg, "permission"):
+		return "Script needs permissions - run in browser first to authorize"
+	case strings.Contains(msg, "not found"):
+		return "Script not found - check that script is deployed and linked to your GCP project"
+	case strings.Contains(msg, "timeout") || strings.Contains(msg, "timed out"):
+		return "Execution timed out (6 min limit)"
+	case strings.Contains(msg, "authorization"):
+		return "Authorization required - complete setup in browser first"
+	default:
+		return ""
+	}
+}
+
+// formatErrorFromDetails extracts error message from execution error details.
+func formatErrorFromDetails(details []google.ExecutionErrorDetail) string {
+	for _, detail := range details {
+		if detail.ErrorMessage == "" {
+			continue
+		}
+		detailMsg := detail.ErrorMessage
+		if detail.ErrorType != "" {
+			detailMsg = detail.ErrorType + ": " + detailMsg
+		}
+		// Add hint for common script errors
+		if strings.Contains(strings.ToLower(detailMsg), "you do not have permission") {
+			return detailMsg + " (run in browser to grant permissions)"
+		}
+		return detailMsg
+	}
+	return ""
 }
 
 // FormatResult formats a result value for display.
