@@ -137,6 +137,10 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return tea.Quit, true
 
 	case key.Matches(msg, a.keys.Back):
+		// Don't intercept Back if current view has a modal open
+		if mh, ok := a.router.Current().(ModalHandler); ok && mh.HasModal() {
+			return nil, false
+		}
 		if a.router.CanGoBack() {
 			a.router.Pop()
 			return nil, true

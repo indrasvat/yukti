@@ -16,6 +16,13 @@ type View interface {
 	ShortHelp() []key.Binding
 }
 
+// ModalHandler is an optional interface for views that manage modals.
+// Views implementing this interface can prevent the app from handling
+// the Back key globally when a modal is visible.
+type ModalHandler interface {
+	HasModal() bool
+}
+
 // Router manages view navigation with a stack-based history.
 type Router struct {
 	current View

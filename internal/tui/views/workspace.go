@@ -112,6 +112,12 @@ func (v *WorkspaceView) Title() string {
 	return v.proj.Title
 }
 
+// HasModal returns true if any modal is currently visible.
+// Implements tui.ModalHandler to prevent app from intercepting Back key.
+func (v *WorkspaceView) HasModal() bool {
+	return v.showLogPath || v.help.IsVisible() || v.fuzzy.IsVisible()
+}
+
 // ShortHelp implements tui.View.
 func (v *WorkspaceView) ShortHelp() []key.Binding {
 	if v.state != WorkspaceStateReady {
