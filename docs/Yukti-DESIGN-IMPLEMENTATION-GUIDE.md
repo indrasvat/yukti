@@ -2677,6 +2677,292 @@ jobs:
 - GAS API autocomplete (stretch goal F12)
 - File content caching for performance
 
+### Phase 2.5: Script Execution & Logging ✅ PARTIALLY COMPLETE (January 12, 2026)
+
+**Goals:**
+- Run Apps Script functions from TUI
+- Display execution results in real-time
+- View console.log output from script executions
+
+**Tasks:**
+1. ✅ Implement `scripts.run` API endpoint handler (`internal/infrastructure/google/scripts.go`)
+2. ✅ Create ProcessService for execution management (`internal/application/process/service.go`)
+3. ✅ Build Execution Log panel component (`internal/tui/components/execution_log.go`)
+4. ✅ Add function picker (Ctrl+R) using fuzzy finder
+5. ✅ Implement spinner animation for running executions
+6. ✅ Display execution results (success/failure/timeout)
+7. ✅ Add file-based logging infrastructure (`internal/infrastructure/logger/`)
+8. ✅ Add `yukti logs` CLI command with `--tail` and `--open` flags
+9. ⬜ Implement `script.processes.list` API for console log retrieval (see below)
+10. ⬜ Display console.log output in expanded execution entry
+
+**Deliverables:**
+- ✅ Run any function via Ctrl+R picker
+- ✅ Real-time execution status with spinner
+- ✅ Execution log panel with history
+- ✅ File-based debug logging
+- ⬜ Console log output viewing
+
+**Implementation Notes (January 12, 2026):**
+- **scripts.run API:** Only returns function return value, NOT console.log output
+- **Console logs:** Go to Google Cloud Logging (Stackdriver), require separate API call
+- **Execution Log UI:** Collapsible panel `[3]─Execution Log` with status icons (✓ ✗ ⟳)
+- **Keybindings:** Ctrl+R to run, L to toggle log panel, Tab to focus, p for path, O to open dir
+- **Log file location:** `~/Library/Application Support/yukti/logs/yukti-YYYY-MM-DD.log`
+- **Status colors:** Running=Blue, Success=Green, Failed=Red, Timeout=Yellow
+
+**Known Limitation:** `scripts.run` API does NOT return `console.log()` output. Logs go to Cloud Logging and require the `script.processes.list` API to retrieve.
+
+---
+
+### Feature: Console Log Viewing via Cloud Logging API
+
+**Priority:** HIGH — Essential for debugging Apps Script functions
+
+**Problem Statement:**
+When running a function via `scripts.run`, users cannot see `console.log()` output. This makes debugging impossible without switching to the Apps Script web editor. Yukti should display console logs inline with execution results.
+
+**Official Documentation:**
+- [Apps Script Logging Guide](https://developers.google.com/apps-script/guides/logging)
+- [processes.list API Reference](https://developers.google.com/apps-script/api/reference/rest/v1/processes/list)
+- [Viewing Process Information](https://developers.google.com/apps-script/api/how-tos/view-processes)
+- [Cloud Logging API](https://cloud.google.com/logging/docs/reference/v2/rest)
+
+**Architecture Overview:**
+
+Two APIs are required to get full execution logs:
+
+1. **Apps Script API `processes.list`** — Returns process metadata (status, duration, timestamps)
+2. **Cloud Logging API `entries.list`** — Returns actual `console.log()` content
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Log Retrieval Flow                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   scripts.run              processes.list         Cloud Logging API │
+│       │                         │                        │          │
+│       │ Execute function        │                        │          │
+│       ├────────────────────────►│                        │          │
+│       │                         │                        │          │
+│       │ Returns: {result}       │                        │          │
+│       │ (NO logs!)              │                        │          │
+│       │                         │                        │          │
+│       │                         │ Correlate by           │          │
+│       │                         │ scriptId + funcName    │          │
+│       │                         │ + startTime            │          │
+│       │                         ├───────────────────────►│          │
+│       │                         │                        │          │
+│       │                         │ Returns: [{message,    │          │
+│       │                         │  severity, timestamp}] │          │
+│       │                         │◄───────────────────────┤          │
+│       │                         │                        │          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### API 1: Apps Script `processes.list`
+
+**Purpose:** Get process metadata to correlate with Cloud Logging entries
+
+**Endpoint:**
+```
+GET https://script.googleapis.com/v1/processes
+```
+
+**Required OAuth Scope:**
+```
+https://www.googleapis.com/auth/script.processes
+```
+✅ Already included in Yukti's scope list — no additional consent needed
+
+**Request Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `userProcessFilter.scriptId` | string | Filter by script ID |
+| `userProcessFilter.functionName` | string | Filter by function name |
+| `userProcessFilter.startTime` | timestamp | Filter processes started after this time (RFC3339) |
+| `userProcessFilter.endTime` | timestamp | Filter processes completed before this time |
+| `userProcessFilter.types[]` | enum | EDITOR, TRIGGER, WEBAPP, API, ADD_ON, MENU |
+| `userProcessFilter.statuses[]` | enum | RUNNING, PAUSED, COMPLETED, CANCELED, FAILED, TIMED_OUT |
+| `pageSize` | int | Max results per page (default 50) |
+| `pageToken` | string | Pagination token |
+
+**Response Structure:**
+```json
+{
+  "processes": [
+    {
+      "projectName": "projects/SCRIPT_ID",
+      "functionName": "logGmailStats",
+      "processType": "API",
+      "processStatus": "COMPLETED",
+      "startTime": "2026-01-12T10:30:00.123Z",
+      "duration": "1.887s",
+      "userAccessLevel": "OWNER",
+      "executingUser": "user@example.com"
+    }
+  ],
+  "nextPageToken": "..."
+}
+```
+
+**Note:** This API returns **metadata only**, NOT `console.log()` content!
+
+---
+
+#### API 2: Cloud Logging `entries.list`
+
+**Purpose:** Get actual `console.log()` and `Logger.log()` content
+
+**Endpoint:**
+```
+POST https://logging.googleapis.com/v2/entries:list
+```
+
+**Required OAuth Scope:**
+```
+https://www.googleapis.com/auth/logging.read
+```
+⚠️ **NEW SCOPE REQUIRED** — Must add to Yukti's OAuth config and re-authenticate
+
+**Required GCP Setup:**
+- Script must be linked to a **standard GCP project** (not default)
+- Cloud Logging API must be enabled in GCP Console
+- User must have `roles/logging.viewer` permission on the GCP project
+
+**Request Body:**
+```json
+{
+  "resourceNames": ["projects/YOUR_GCP_PROJECT_ID"],
+  "filter": "resource.type=\"app_script_function\" AND resource.labels.function_name=\"logGmailStats\" AND timestamp>=\"2026-01-12T10:30:00Z\"",
+  "orderBy": "timestamp asc",
+  "pageSize": 100
+}
+```
+
+**Response Structure:**
+```json
+{
+  "entries": [
+    {
+      "timestamp": "2026-01-12T10:30:00.456Z",
+      "severity": "INFO",
+      "textPayload": "📧 Testing Gmail API...",
+      "resource": {
+        "type": "app_script_function",
+        "labels": {
+          "function_name": "logGmailStats",
+          "project_id": "my-gcp-project"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-01-12T10:30:01.234Z",
+      "severity": "INFO",
+      "textPayload": "   ✅ Gmail: PASS"
+    }
+  ],
+  "nextPageToken": "..."
+}
+```
+
+---
+
+**Implementation Plan:**
+
+1. **Infrastructure Layer:**
+
+   `internal/infrastructure/google/processes.go`:
+   ```go
+   type ProcessService struct {
+       client *Client
+   }
+
+   // ListProcesses fetches execution processes from Apps Script API
+   func (s *ProcessService) ListProcesses(ctx context.Context, scriptID, functionName string, since time.Time) ([]Process, error)
+   ```
+
+   `internal/infrastructure/google/cloudlogging.go` (NEW):
+   ```go
+   type CloudLoggingService struct {
+       client *Client // Uses same OAuth client with logging.read scope
+   }
+
+   type LogEntry struct {
+       Timestamp time.Time
+       Severity  string // INFO, WARNING, ERROR
+       Message   string
+   }
+
+   // FetchLogs retrieves console.log entries from Cloud Logging API
+   func (s *CloudLoggingService) FetchLogs(ctx context.Context, gcpProjectID, functionName string, startTime, endTime time.Time) ([]LogEntry, error)
+   ```
+
+2. **Application Layer** (`internal/application/process/service.go`):
+   - Add `FetchExecutionLogs(ctx, entry ExecutionEntry)` method
+   - Correlate execution by scriptID + functionName + startTime (±5 seconds)
+   - Cache log entries with execution entry
+
+3. **TUI Layer** (`internal/tui/components/execution_log.go`):
+   - Add expandable log view when pressing Enter on execution entry
+   - Show log entries with severity icons: ℹ️ INFO, ⚠️ WARNING, ❌ ERROR
+   - Support scrolling through long log output
+   - Lazy-fetch logs on-demand (when user expands entry)
+
+4. **OAuth Config** (`internal/infrastructure/google/auth.go`):
+   - Add new scope: `https://www.googleapis.com/auth/logging.read`
+   - Users will need to re-authenticate after upgrading
+
+**UI Mockup — Expanded Log Entry:**
+```
+╭[3]─Execution Log──────────────────────────────────────────── 3 runs ▼ ─╮
+│                                                                         │
+│  ▾ ✓ logGmailStats         Completed         1.887s       2m ago       │
+│    ├─────────────────────────────────────────────────────────────────  │
+│    │ ℹ️ 📧 Testing Gmail API...                                         │
+│    │ ℹ️    ✅ Gmail: PASS                                               │
+│    │ ℹ️    - Inbox threads: 100                                        │
+│    │ ℹ️    - Unread count: 42912                                       │
+│    │ ℹ️    - Labels: 15                                                │
+│    └─────────────────────────────────────────────────────────────────  │
+│    ✓ getInboxStats         Completed         0.847s       5m ago       │
+│                                                                         │
+╰────────────────────────────────────────────── yukti-2026-01-12.log ────╯
+```
+
+**Technical Considerations:**
+
+1. **Correlation Challenge:** `scripts.run` doesn't return a process ID. Must correlate by:
+   - Script ID + Function name + Start time (within 5-second tolerance)
+   - Poll `processes.list` briefly after execution completes to find matching process
+
+2. **GCP Project Requirement:**
+   - Scripts must be linked to a **standard GCP project** (not the default hidden one)
+   - Many users' scripts use default projects → logs won't be accessible
+   - Should gracefully handle this with "Logs unavailable - script not linked to GCP project"
+
+3. **Rate Limits:**
+   - Cloud Logging API: 60 requests/minute per user
+   - Implement caching and batch fetching
+   - Only fetch logs on-demand (when user expands entry)
+
+4. **Permissions:**
+   - User must have `roles/logging.viewer` on the GCP project
+   - If script is shared, log access depends on GCP IAM, not script sharing
+
+**Acceptance Criteria:**
+- [ ] Add `https://www.googleapis.com/auth/logging.read` to OAuth scopes
+- [ ] Implement Cloud Logging API client
+- [ ] Correlate executions with log entries
+- [ ] `console.log()` messages visible in Yukti execution log
+- [ ] Log severity levels displayed with appropriate icons (ℹ️ ⚠️ ❌)
+- [ ] Expandable/collapsible log entries with scrolling
+- [ ] Graceful fallback when GCP project not linked
+
+---
+
 ### Phase 3: Operations (Week 5-6)
 
 **Goals:**
