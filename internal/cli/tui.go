@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/muesli/termenv"
 
+	appprocess "yukti/internal/application/process"
 	"yukti/internal/domain/project"
 	"yukti/internal/infrastructure/cache"
 	"yukti/internal/infrastructure/google"
@@ -65,10 +66,14 @@ func runTUI() {
 		googleRepo := google.NewProjectRepository(apiClient)
 		projectRepo := cache.NewCachingRepository(googleRepo)
 
-		// Show welcome view with repository available
+		// Create script runner and process service for function execution
+		scriptRunner := google.NewScriptRunner(apiClient)
+		processService := appprocess.NewService(scriptRunner)
+
+		// Show welcome view with repository and process service available
 		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
 			AuthState:   tui.AuthStateLoggedIn,
-			ViewFactory: views.NewFactory(),
+			ViewFactory: views.NewFactoryWithService(processService),
 		}, projectRepo)
 		return
 	}

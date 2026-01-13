@@ -34,11 +34,14 @@ type FuzzyItem struct {
 // FuzzyFinder provides fuzzy search across files and functions.
 type FuzzyFinder struct {
 	// State
-	input    textinput.Model
-	items    []FuzzyItem
-	filtered []FuzzyItem
-	selected int
-	visible  bool
+	input         textinput.Model
+	items         []FuzzyItem
+	allItems      []FuzzyItem // All items (before filtering by type)
+	filtered      []FuzzyItem
+	selected      int
+	visible       bool
+	functionsOnly bool   // Only show functions
+	title         string // Custom title
 
 	// Layout
 	width  int
@@ -99,7 +102,7 @@ func NewFuzzyFinder() *FuzzyFinder {
 
 // SetItems populates the fuzzy finder with searchable items.
 func (f *FuzzyFinder) SetItems(files []project.File) {
-	f.items = make([]FuzzyItem, 0, len(files)*2)
+	f.allItems = make([]FuzzyItem, 0, len(files)*2)
 
 	for i := range files {
 		file := &files[i]
@@ -114,7 +117,7 @@ func (f *FuzzyFinder) SetItems(files []project.File) {
 		}
 
 		lines := strings.Count(file.Source, "\n") + 1
-		f.items = append(f.items, FuzzyItem{
+		f.allItems = append(f.allItems, FuzzyItem{
 			Title:       file.Name,
 			Description: fmt.Sprintf("%d lines", lines),
 			Icon:        icon,
@@ -127,7 +130,7 @@ func (f *FuzzyFinder) SetItems(files []project.File) {
 				fn := &file.FunctionSet.Functions[j]
 				// Estimate line number (would need actual parsing for accuracy)
 				lineNum := findFunctionLine(file.Source, fn.Name)
-				f.items = append(f.items, FuzzyItem{
+				f.allItems = append(f.allItems, FuzzyItem{
 					Title:       fn.Name + "()",
 					Description: file.Name,
 					Icon:        "ƒ",
@@ -139,7 +142,30 @@ func (f *FuzzyFinder) SetItems(files []project.File) {
 		}
 	}
 
+	f.items = f.allItems
 	f.filtered = f.items
+}
+
+// SetFunctionsOnly sets whether to only show functions.
+func (f *FuzzyFinder) SetFunctionsOnly(functionsOnly bool) {
+	f.functionsOnly = functionsOnly
+	if functionsOnly {
+		f.items = make([]FuzzyItem, 0)
+		for _, item := range f.allItems {
+			if item.Function != nil {
+				f.items = append(f.items, item)
+			}
+		}
+	} else {
+		f.items = f.allItems
+	}
+	f.filtered = f.items
+}
+
+// SetTitle sets a custom title for the fuzzy finder.
+func (f *FuzzyFinder) SetTitle(title string) {
+	f.title = title
+	f.input.Placeholder = "Type to filter..."
 }
 
 // findFunctionLine finds the approximate line number for a function.
@@ -159,6 +185,12 @@ func (f *FuzzyFinder) Show() tea.Cmd {
 	f.visible = true
 	f.input.SetValue("")
 	f.input.Focus()
+	// Re-apply functions filter if set
+	if f.functionsOnly {
+		f.SetFunctionsOnly(true)
+	} else {
+		f.items = f.allItems
+	}
 	f.filtered = f.items
 	f.selected = 0
 	return textinput.Blink
@@ -168,6 +200,9 @@ func (f *FuzzyFinder) Show() tea.Cmd {
 func (f *FuzzyFinder) Hide() {
 	f.visible = false
 	f.input.Blur()
+	f.functionsOnly = false
+	f.title = ""
+	f.input.Placeholder = "Search files and functions..."
 }
 
 // IsVisible returns whether the finder is shown.
@@ -318,6 +353,16 @@ func (f *FuzzyFinder) View() string {
 		return ""
 	}
 
+	// Title if set
+	var titleView string
+	if f.title != "" {
+		titleStyle := lipgloss.NewStyle().
+			Foreground(styles.Primary).
+			Bold(true).
+			MarginBottom(1)
+		titleView = titleStyle.Render("─── " + f.title + " ")
+	}
+
 	// Input field
 	inputView := f.inputStyle.Width(f.width - 4).Render(f.input.View())
 
@@ -356,11 +401,16 @@ func (f *FuzzyFinder) View() string {
 	// Count indicator
 	countText := f.hintStyle.Render(fmt.Sprintf("  %d/%d", len(f.filtered), len(f.items)))
 
+	// Build content with optional title
+	var contentParts []string
+	if titleView != "" {
+		contentParts = append(contentParts, titleView)
+	}
+	contentParts = append(contentParts, inputView, results.String(), countText)
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
-		inputView,
-		results.String(),
-		countText,
+		contentParts...,
 	)
 
 	return f.containerStyle.Width(f.width).Render(content)

@@ -15,6 +15,7 @@ type Pane int
 const (
 	LeftPane Pane = iota
 	RightPane
+	BottomPane
 )
 
 // SplitPane is a horizontal split pane container with focus management.
