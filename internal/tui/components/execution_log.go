@@ -403,11 +403,7 @@ func (e *ExecutionLog) renderEntry(entry appprocess.ExecutionEntry, selected boo
 	// Add detail line (result/error/running message), padded to full width
 	secondLine := e.getSecondLine(entry, width)
 
-	if selected && e.focused {
-		highlightStyle := lipgloss.NewStyle().Background(styles.Surface)
-		return highlightStyle.Render(fullLine + secondLine)
-	}
-
+	// No Background() wrapping - it causes bleed. Selection is indicated by bold fnStyle.
 	return fullLine + secondLine
 }
 
