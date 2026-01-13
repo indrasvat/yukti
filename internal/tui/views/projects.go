@@ -316,12 +316,6 @@ func (v *ProjectsView) View() string {
 
 	// Overlay help modal if visible
 	if v.help.IsVisible() {
-		// Ensure background has enough lines for modal compositing
-		lines := strings.Split(view, "\n")
-		for len(lines) < v.height {
-			lines = append(lines, strings.Repeat(" ", v.width))
-		}
-		view = strings.Join(lines, "\n")
 		view = v.overlayModal(view, v.help.View())
 	}
 
@@ -490,7 +484,11 @@ func (v *ProjectsView) renderList() string {
 			"",
 			noMatchStyle.Render("No projects match your filter"),
 		)
-		return lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
+		return lipgloss.NewStyle().
+			Padding(1, 3).
+			Width(v.width).
+			Height(v.height).
+			Render(noMatchContent)
 	}
 
 	// Calculate visible projects
@@ -523,12 +521,20 @@ func (v *ProjectsView) renderList() string {
 		scrollIndicator,
 	)
 
-	// Add padding - NO HEIGHT FILLING for now to debug header issue
+	// Apply horizontal padding only - no height manipulation via lipgloss
+	// lipgloss Height()/MaxHeight() cause issues with app.go header/footer layout
 	paddedContent := lipgloss.NewStyle().
-		Padding(1, 3).
+		PaddingLeft(3).
+		PaddingRight(3).
+		Width(v.width).
 		Render(content)
 
-	return paddedContent
+	// Add top padding (1 empty line with full width for modal compositing)
+	paddedContent = strings.Repeat(" ", v.width) + "\n" + paddedContent
+
+	// Ensure EXACTLY v.height lines for modal compositing
+	// Pass width so padding lines are full-width (required for overlay)
+	return ensureExactHeight(paddedContent, v.height, v.width)
 }
 
 func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) string {
@@ -670,6 +676,28 @@ type projectsLoadedMsg struct {
 
 type projectsErrorMsg struct {
 	err error
+}
+
+// ensureExactHeight pads or truncates content to exactly the specified height.
+// This is critical for modal compositing - background must have exact line count
+// AND each line must be full width for proper overlay compositing.
+func ensureExactHeight(content string, height int, width int) string {
+	lines := strings.Split(content, "\n")
+
+	// Truncate if too many lines
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+
+	// Create a full-width empty line for padding
+	emptyLine := strings.Repeat(" ", width)
+
+	// Pad if too few lines - use full-width empty lines for proper modal compositing
+	for len(lines) < height {
+		lines = append(lines, emptyLine)
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // formatTimeAgo formats a time as a human-readable relative time.

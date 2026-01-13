@@ -95,22 +95,25 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
+	// Process message types that need special handling
+	switch typedMsg := msg.(type) {
 	case tea.KeyMsg:
-		if cmd, handled := a.handleKeyMsg(msg); handled {
+		if cmd, handled := a.handleKeyMsg(typedMsg); handled {
 			return a, cmd
 		}
 
 	case tea.WindowSizeMsg:
-		a.width = msg.Width
-		a.height = msg.Height
+		a.width = typedMsg.Width
+		a.height = typedMsg.Height
 		// Adjust the message for views: subtract header (3) and footer (3) heights
 		// so views render to the content area, not the full terminal
-		msg.Height = max(1, msg.Height-6)
+		// IMPORTANT: Reassign to outer msg variable so views receive modified height
+		typedMsg.Height = max(1, typedMsg.Height-6)
+		msg = typedMsg
 
 	case ToastMsg:
-		a.toast = msg.Message
-		a.toastLevel = msg.Level
+		a.toast = typedMsg.Message
+		a.toastLevel = typedMsg.Level
 		cmds = append(cmds, clearToastAfterDelay())
 
 	case clearToastMsg:
