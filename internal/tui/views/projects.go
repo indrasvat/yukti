@@ -681,7 +681,7 @@ type projectsErrorMsg struct {
 // ensureExactHeight pads or truncates content to exactly the specified height.
 // This is critical for modal compositing - background must have exact line count
 // AND each line must be full width for proper overlay compositing.
-func ensureExactHeight(content string, height int, width int) string {
+func ensureExactHeight(content string, height, width int) string {
 	lines := strings.Split(content, "\n")
 
 	// Truncate if too many lines

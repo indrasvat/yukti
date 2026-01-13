@@ -11,6 +11,14 @@ Future AI sessions should read this file to avoid repeating mistakes.
   - Types: feat, fix, docs, style, refactor, test, chore
   - Keep messages concise and descriptive
 
+## Automated TUI Testing With iTerm2-driver Skill
+
+It is VERY IMPORTANT to leverage the `iterm2-driver` skill for automated testing/visulization of the Yukti TUI!
+
+If not already installed (check `~/.claude/skills/iterm2-driver/SKILL.md` exists), it can be installed following the instructions in https://github.com/indrasvat/claude-code-skills/blob/main/README.md.
+
+Automation scripts MUST be created under the local `./.claude/automations/` (create it if not there). They MUST have checks to ensure proper cleanup of the opened iTerm2 tab, the Yukti TUI app etc. All resources should be properly cleaned up after each automation run!
+
 ## Project Structure
 ```
 yukti/
