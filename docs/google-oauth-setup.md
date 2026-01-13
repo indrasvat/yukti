@@ -75,6 +75,34 @@ Paste your Client ID and Client Secret when prompted.
 
 ---
 
+## Running Functions (Optional Setup)
+
+To use Yukti's function execution feature (Ctrl+R), your Apps Script projects need additional setup.
+
+### Step 6: Link Apps Script Project to GCP Project
+
+Each Apps Script project you want to run functions from must be linked to your GCP project:
+
+1. Open your Apps Script project at [script.google.com](https://script.google.com/)
+2. Click the **⚙ gear icon** (Project Settings) in the left sidebar
+3. Under "Google Cloud Platform (GCP) Project", click **Change project**
+4. Enter your GCP **Project Number** (found in GCP Console → Project Info → Project number)
+5. Click **Set project**
+
+### Step 7: Deploy as API Executable
+
+You must create an API Executable deployment at least once:
+
+1. In your Apps Script project, click **Deploy** → **New deployment**
+2. Click the **gear icon** next to "Select type" and choose **API Executable**
+3. Optionally add a description (e.g., "API access for Yukti")
+4. Click **Deploy**
+
+> **Note:** With `devMode`, Yukti always runs the latest saved version of your script.
+> The deployment is only needed once to enable API access.
+
+---
+
 ## Troubleshooting
 
 ### "This app is blocked"
@@ -91,3 +119,21 @@ The OAuth consent screen isn't configured correctly:
 
 You haven't added yourself as a test user. Go to:
 Google Cloud Console → Google Auth Platform → Audience → Add your email
+
+### "resource not found: Requested entity was not found"
+
+When running functions (Ctrl+R), this error means one of:
+
+1. **Script not linked to GCP project**: Follow Steps 6-7 above
+2. **No API Executable deployment**: Create a deployment as described in Step 7
+3. **Wrong GCP project**: Ensure the Apps Script project is linked to the **same** GCP project where you created your OAuth credentials
+
+### "access forbidden: Request had insufficient authentication scopes"
+
+The OAuth token doesn't have permissions for services your script uses. You need to re-authenticate:
+
+```bash
+yukti logout && yukti login
+```
+
+This will request all necessary scopes including Gmail, Calendar, Drive, and Spreadsheets access.

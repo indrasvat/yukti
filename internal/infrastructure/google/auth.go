@@ -21,13 +21,21 @@ import (
 
 // OAuth2 scopes required for Google Apps Script API.
 var scopes = []string{
+	// Script project management
 	"https://www.googleapis.com/auth/script.projects",
 	"https://www.googleapis.com/auth/script.deployments",
 	"https://www.googleapis.com/auth/script.metrics",
 	"https://www.googleapis.com/auth/script.processes",
-	// Drive API scope needed for listing Apps Script projects
-	// (Apps Script API doesn't have a list endpoint)
-	"https://www.googleapis.com/auth/drive.readonly",
+
+	// Drive API - needed for listing Apps Script projects
+	"https://www.googleapis.com/auth/drive",
+
+	// Script execution scopes - required for scripts.run API
+	// These must match the services used by the scripts being executed
+	"https://www.googleapis.com/auth/gmail.modify",
+	"https://www.googleapis.com/auth/calendar",
+	"https://www.googleapis.com/auth/spreadsheets",
+	"https://www.googleapis.com/auth/documents",
 }
 
 // Common errors.

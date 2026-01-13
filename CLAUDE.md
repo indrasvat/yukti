@@ -77,6 +77,25 @@ Google returns `oauth2: "invalid_request" "client_secret is missing."` without i
 - Empty projects have one file: `appsscript.json`
 - Bound scripts require `parentId` in creation request
 
+### Scripts Run API (scripts.run)
+
+**Critical Requirements for Function Execution:**
+
+The `scripts.run` API has strict requirements:
+
+1. **Shared GCP Project**: The Apps Script project and the OAuth client (Yukti credentials) MUST be linked to the **same** GCP project. Without this, you get "resource not found: Requested entity was not found".
+
+2. **API Executable Deployment**: The script must be deployed as "API Executable" at least once, even when using `devMode: true`.
+
+3. **Matching OAuth Scopes**: The OAuth token must include all scopes that the script uses. For example, if the script uses GmailApp, you need `gmail.modify` scope.
+
+**Setup Steps for Users:**
+1. Link their Apps Script project to their GCP project via Apps Script → Project Settings → Change GCP project
+2. Deploy as API Executable: Deploy → New deployment → API Executable
+3. Re-authenticate if scope errors occur: `yukti logout && yukti login`
+
+**Reference:** [Execute Functions with the Apps Script API](https://developers.google.com/apps-script/api/how-tos/execute)
+
 ## Code Patterns
 
 ### BubbleTea Best Practices
