@@ -209,17 +209,12 @@ func (a *App) View() string {
 	content := a.renderContent(contentHeight)
 	footer := a.renderFooter()
 
-	// Apply fixed height to content area so footer stays at bottom
-	contentStyled := lipgloss.NewStyle().
-		Height(contentHeight).
-		Width(a.width).
-		Render(content)
-
 	// Compose the full view
+	// Views are responsible for filling their height for footer positioning
 	view := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		contentStyled,
+		content,
 		footer,
 	)
 
