@@ -7,9 +7,11 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"yukti/internal/buildinfo"
 	"yukti/internal/tui"
+	"yukti/internal/tui/components"
 	"yukti/internal/tui/styles"
 )
 
@@ -26,6 +28,7 @@ const logo = `
 type WelcomeView struct {
 	width  int
 	height int
+	help   *components.HelpModal
 }
 
 // NewWelcomeView creates a new welcome view.
@@ -33,6 +36,7 @@ func NewWelcomeView() *WelcomeView {
 	return &WelcomeView{
 		width:  80,
 		height: 24,
+		help:   components.NewHelpModal(),
 	}
 }
 
@@ -55,6 +59,12 @@ func (v *WelcomeView) ShortHelp() []key.Binding {
 	}
 }
 
+// HasModal returns true if any modal is currently visible.
+// Implements tui.ModalHandler to prevent app from intercepting Back key.
+func (v *WelcomeView) HasModal() bool {
+	return v.help.IsVisible()
+}
+
 // Init implements tea.Model.
 func (v *WelcomeView) Init() tea.Cmd {
 	return nil
@@ -62,13 +72,23 @@ func (v *WelcomeView) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (v *WelcomeView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle help modal first if visible
+	if v.help.IsVisible() {
+		v.help.Update(msg)
+		return v, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		v.width = msg.Width
 		v.height = msg.Height
 	case tea.KeyMsg:
-		if msg.String() == "enter" {
+		switch msg.String() {
+		case "enter":
 			return v, tui.NavigateToProjects()
+		case "?":
+			v.help.Toggle()
+			return v, nil
 		}
 	}
 	return v, nil
@@ -157,13 +177,53 @@ func (v *WelcomeView) View() string {
 	)
 
 	// Center in the viewport
-	return lipgloss.Place(
+	view := lipgloss.Place(
 		v.width,
 		v.height,
 		lipgloss.Center,
 		lipgloss.Center,
 		content,
 	)
+
+	// Overlay help modal if visible
+	if v.help.IsVisible() {
+		view = v.overlayModal(view, v.help.View())
+	}
+
+	return view
+}
+
+// overlayModal composites a modal onto styled background content.
+func (v *WelcomeView) overlayModal(background, modal string) string {
+	bgLines := strings.Split(background, "\n")
+	modalLines := strings.Split(modal, "\n")
+
+	bgHeight := len(bgLines)
+	modalHeight := len(modalLines)
+	modalWidth := lipgloss.Width(modal)
+
+	// Calculate center position
+	topOffset := max(0, (bgHeight-modalHeight)/3)
+	leftOffset := max(0, (v.width-modalWidth)/2)
+
+	// Composite: overlay modal lines onto background
+	result := make([]string, len(bgLines))
+	for i, bgLine := range bgLines {
+		if i >= topOffset && i < topOffset+modalHeight {
+			modalLineIdx := i - topOffset
+			result[i] = composeWelcomeModalLine(bgLine, modalLines[modalLineIdx], leftOffset, modalWidth, v.width)
+		} else {
+			result[i] = bgLine
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
+// composeWelcomeModalLine overlays a modal line onto a background line.
+func composeWelcomeModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWidth int) string {
+	leftPart := ansi.Cut(bgLine, 0, leftOffset)
+	rightPart := ansi.Cut(bgLine, leftOffset+modalWidth, totalWidth)
+	return leftPart + "\033[0m" + modalLine + "\033[0m" + rightPart
 }
 
 // renderGradientLogo renders the logo with a vertical gradient effect.

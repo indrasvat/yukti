@@ -11,9 +11,11 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"yukti/internal/domain/project"
 	"yukti/internal/tui"
+	"yukti/internal/tui/components"
 	"yukti/internal/tui/styles"
 )
 
@@ -42,6 +44,9 @@ type ProjectsView struct {
 	// Filter state
 	filtering   bool
 	filterInput textinput.Model
+
+	// Help modal
+	help *components.HelpModal
 }
 
 // NewProjectsView creates a new projects list view.
@@ -68,12 +73,19 @@ func NewProjectsView(repo project.Repository) *ProjectsView {
 		offset:      0,
 		width:       80,
 		height:      24,
+		help:        components.NewHelpModal(),
 	}
 }
 
 // Title implements tui.View.
 func (v *ProjectsView) Title() string {
 	return "Projects"
+}
+
+// HasModal returns true if any modal is currently visible.
+// Implements tui.ModalHandler to prevent app from intercepting Back key.
+func (v *ProjectsView) HasModal() bool {
+	return v.help.IsVisible() || v.filtering
 }
 
 // ShortHelp implements tui.View.
@@ -112,6 +124,12 @@ func (v *ProjectsView) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (v *ProjectsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle help modal first if visible
+	if v.help.IsVisible() {
+		v.help.Update(msg)
+		return v, nil
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -121,6 +139,11 @@ func (v *ProjectsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return v, nil
 
 	case tea.KeyMsg:
+		// Handle `?` for help on any state
+		if msg.String() == "?" {
+			v.help.Toggle()
+			return v, nil
+		}
 		if v.state == ProjectListStateReady {
 			if cmd, handled := v.handleKeyMsg(msg); handled {
 				return v, cmd
@@ -281,14 +304,55 @@ func (v *ProjectsView) ensureVisible() {
 
 // View implements tea.Model.
 func (v *ProjectsView) View() string {
+	var view string
 	switch v.state {
 	case ProjectListStateLoading:
-		return v.renderLoading()
+		view = v.renderLoading()
 	case ProjectListStateError:
-		return v.renderError()
+		view = v.renderError()
 	default:
-		return v.renderList()
+		view = v.renderList()
 	}
+
+	// Overlay help modal if visible
+	if v.help.IsVisible() {
+		view = v.overlayModal(view, v.help.View())
+	}
+
+	return view
+}
+
+// overlayModal composites a modal onto styled background content.
+func (v *ProjectsView) overlayModal(background, modal string) string {
+	bgLines := strings.Split(background, "\n")
+	modalLines := strings.Split(modal, "\n")
+
+	bgHeight := len(bgLines)
+	modalHeight := len(modalLines)
+	modalWidth := lipgloss.Width(modal)
+
+	// Calculate center position
+	topOffset := max(0, (bgHeight-modalHeight)/3)
+	leftOffset := max(0, (v.width-modalWidth)/2)
+
+	// Composite: overlay modal lines onto background
+	result := make([]string, len(bgLines))
+	for i, bgLine := range bgLines {
+		if i >= topOffset && i < topOffset+modalHeight {
+			modalLineIdx := i - topOffset
+			result[i] = composeProjectsModalLine(bgLine, modalLines[modalLineIdx], leftOffset, modalWidth, v.width)
+		} else {
+			result[i] = bgLine
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
+// composeProjectsModalLine overlays a modal line onto a background line.
+func composeProjectsModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWidth int) string {
+	leftPart := ansi.Cut(bgLine, 0, leftOffset)
+	rightPart := ansi.Cut(bgLine, leftOffset+modalWidth, totalWidth)
+	return leftPart + "\033[0m" + modalLine + "\033[0m" + rightPart
 }
 
 func (v *ProjectsView) renderLoading() string {
