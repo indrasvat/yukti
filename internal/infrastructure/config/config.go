@@ -24,6 +24,11 @@ type Config struct {
 	// Useful to avoid keychain prompts during development.
 	// If empty, uses system keychain.
 	TokenFile string `json:"token_file,omitempty"`
+
+	// GCPProject is an optional manual override for the GCP project number.
+	// Used for Cloud Logging API when the OAuth client ID is from a different project
+	// than the Apps Script project. If empty, derived from OAuth client ID prefix.
+	GCPProject string `json:"gcp_project,omitempty"`
 }
 
 // OAuthConfig holds OAuth2 credentials.
