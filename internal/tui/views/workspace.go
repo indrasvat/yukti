@@ -925,18 +925,21 @@ func (v *WorkspaceView) openLogDirectory() {
 func (v *WorkspaceView) renderLogPathModal() string {
 	logPath := logger.Path()
 
-	// Styles
+	// Styles - all with explicit Surface background to prevent bleed
 	titleStyle := lipgloss.NewStyle().
 		Foreground(styles.Primary).
+		Background(styles.Surface).
 		Bold(true).
 		MarginBottom(1)
 
 	pathStyle := lipgloss.NewStyle().
 		Foreground(styles.Info).
+		Background(styles.Surface).
 		Bold(true)
 
 	hintStyle := lipgloss.NewStyle().
 		Foreground(styles.TextMuted).
+		Background(styles.Surface).
 		Italic(true).
 		MarginTop(1)
 
