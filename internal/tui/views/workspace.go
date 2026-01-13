@@ -11,6 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	appprocess "yukti/internal/application/process"
+	domainprocess "yukti/internal/domain/process"
 	"yukti/internal/domain/project"
 	"yukti/internal/tui/components"
 	"yukti/internal/tui/styles"
@@ -33,16 +35,22 @@ type WorkspaceView struct {
 	content *project.Content
 
 	// Components
-	fileTree   *components.FileTree
-	codeViewer *CodeViewerView
-	fuzzy      *components.FuzzyFinder
-	help       *components.HelpModal
-	spinner    spinner.Model
+	fileTree     *components.FileTree
+	codeViewer   *CodeViewerView
+	executionLog *components.ExecutionLog
+	fuzzy        *components.FuzzyFinder
+	help         *components.HelpModal
+	spinner      spinner.Model
+
+	// Process service for running functions
+	processService *appprocess.Service
 
 	// State
-	state       WorkspaceState
-	errMsg      string
-	focusedPane components.Pane
+	state         WorkspaceState
+	errMsg        string
+	focusedPane   components.Pane
+	showRunPicker bool // Show function picker for running
+	runningFunc   string
 
 	// Layout
 	width      int
@@ -55,6 +63,11 @@ type WorkspaceView struct {
 
 // NewWorkspaceView creates a new workspace view for a project.
 func NewWorkspaceView(proj project.Project, repo project.Repository) *WorkspaceView {
+	return NewWorkspaceViewWithService(proj, repo, nil)
+}
+
+// NewWorkspaceViewWithService creates a workspace view with an optional process service.
+func NewWorkspaceViewWithService(proj project.Project, repo project.Repository, processService *appprocess.Service) *WorkspaceView {
 	// Create spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -69,13 +82,18 @@ func NewWorkspaceView(proj project.Project, repo project.Repository) *WorkspaceV
 	// Create help modal
 	help := components.NewHelpModal()
 
+	// Create execution log
+	execLog := components.NewExecutionLog()
+
 	return &WorkspaceView{
 		proj:           proj,
 		repo:           repo,
 		fileTree:       ft,
+		executionLog:   execLog,
 		fuzzy:          fuzzy,
 		help:           help,
 		spinner:        s,
+		processService: processService,
 		state:          WorkspaceStateLoading,
 		focusedPane:    components.LeftPane,
 		width:          120,
@@ -102,6 +120,26 @@ func (v *WorkspaceView) ShortHelp() []key.Binding {
 			key.WithHelp("tab", "pane"),
 		),
 		key.NewBinding(
+			key.WithKeys("ctrl+r"),
+			key.WithHelp("^R", "run"),
+		),
+	}
+
+	// Add log toggle hint based on state
+	if v.executionLog.IsExpanded() {
+		bindings = append(bindings, key.NewBinding(
+			key.WithKeys("L"),
+			key.WithHelp("L", "hide logs"),
+		))
+	} else {
+		bindings = append(bindings, key.NewBinding(
+			key.WithKeys("L"),
+			key.WithHelp("L", "logs"),
+		))
+	}
+
+	bindings = append(bindings,
+		key.NewBinding(
 			key.WithKeys("ctrl+p"),
 			key.WithHelp("^P", "find"),
 		),
@@ -109,13 +147,18 @@ func (v *WorkspaceView) ShortHelp() []key.Binding {
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
 		),
-	}
+	)
 
 	// Add context-specific bindings
-	if v.focusedPane == components.LeftPane {
+	switch v.focusedPane {
+	case components.LeftPane:
 		bindings = append(bindings, v.fileTree.ShortHelp()...)
-	} else if v.codeViewer != nil {
-		bindings = append(bindings, v.codeViewer.ShortHelp()...)
+	case components.RightPane:
+		if v.codeViewer != nil {
+			bindings = append(bindings, v.codeViewer.ShortHelp()...)
+		}
+	case components.BottomPane:
+		bindings = append(bindings, v.executionLog.ShortHelp()...)
 	}
 
 	return bindings
@@ -148,7 +191,26 @@ func (v *WorkspaceView) handleModals(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 		return true, nil
 	}
 
-	// Handle fuzzy finder if visible
+	// Handle run picker if visible
+	if v.showRunPicker && v.fuzzy.IsVisible() {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			if msg.String() == "esc" {
+				v.showRunPicker = false
+				v.fuzzy.Hide()
+				return true, nil
+			}
+			_, cmd = v.fuzzy.Update(msg)
+			return true, cmd
+		case components.FuzzySelectMsg:
+			v.showRunPicker = false
+			return true, v.handleRunFunctionSelect(msg.Item)
+		}
+		_, cmd = v.fuzzy.Update(msg)
+		return true, cmd
+	}
+
+	// Handle regular fuzzy finder if visible
 	if v.fuzzy.IsVisible() {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -186,6 +248,11 @@ func (v *WorkspaceView) handleMainMessages(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
+	case components.SpinnerTickMsg:
+		// Forward to execution log
+		_, cmd := v.executionLog.Update(msg)
+		cmds = append(cmds, cmd)
+
 	case workspaceContentLoadedMsg:
 		cmd := v.handleContentLoaded(msg)
 		return v, cmd
@@ -200,8 +267,18 @@ func (v *WorkspaceView) handleMainMessages(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return v, nil
 
 	case components.FuzzySelectMsg:
+		if v.showRunPicker {
+			v.showRunPicker = false
+			cmd := v.handleRunFunctionSelect(msg.Item)
+			return v, cmd
+		}
 		cmd := v.handleFuzzySelect(msg.Item)
 		return v, cmd
+
+	case runFunctionResultMsg:
+		v.runningFunc = ""
+		v.executionLog.UpdateEntry(msg.entry)
+		return v, nil
 	}
 
 	// Update focused component
@@ -230,31 +307,52 @@ func (v *WorkspaceView) handleContentLoaded(msg workspaceContentLoadedMsg) tea.C
 func (v *WorkspaceView) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "tab":
-		v.toggleFocus()
+		v.cycleFocus()
 		return nil
 
 	case "ctrl+p":
+		v.showRunPicker = false
 		return v.fuzzy.Show()
+
+	case "ctrl+r", "x":
+		// Open function picker for running
+		if v.processService != nil && v.content != nil {
+			v.showRunPicker = true
+			v.fuzzy.SetFunctionsOnly(true)
+			v.fuzzy.SetTitle("Run Function")
+			return v.fuzzy.Show()
+		}
+
+	case "L":
+		v.executionLog.Toggle()
+		v.updateChildSizes()
+		return nil
 
 	case "?":
 		v.help.Toggle()
 		return nil
 
 	case "r":
-		if v.state == WorkspaceStateReady {
+		if v.state == WorkspaceStateReady && !v.showRunPicker {
 			v.state = WorkspaceStateLoading
 			return tea.Batch(v.spinner.Tick, v.loadContent())
 		}
 	}
 
 	// Pass to focused component
-	if v.focusedPane == components.LeftPane {
+	switch v.focusedPane {
+	case components.LeftPane:
 		var cmd tea.Cmd
 		_, cmd = v.fileTree.Update(msg)
 		return cmd
-	} else if v.codeViewer != nil {
-		var cmd tea.Cmd
-		_, cmd = v.codeViewer.Update(msg)
+	case components.RightPane:
+		if v.codeViewer != nil {
+			var cmd tea.Cmd
+			_, cmd = v.codeViewer.Update(msg)
+			return cmd
+		}
+	case components.BottomPane:
+		_, cmd := v.executionLog.Update(msg)
 		return cmd
 	}
 
@@ -276,22 +374,43 @@ func (v *WorkspaceView) handleFuzzySelect(item components.FuzzyItem) tea.Cmd {
 	return nil
 }
 
-// toggleFocus switches focus between panes.
-func (v *WorkspaceView) toggleFocus() {
-	if v.focusedPane == components.LeftPane {
+// cycleFocus cycles focus through panes (Left -> Right -> Bottom -> Left).
+func (v *WorkspaceView) cycleFocus() {
+	switch v.focusedPane {
+	case components.LeftPane:
 		v.focusedPane = components.RightPane
-	} else {
+	case components.RightPane:
+		if v.executionLog.IsExpanded() {
+			v.focusedPane = components.BottomPane
+		} else {
+			v.focusedPane = components.LeftPane
+		}
+	case components.BottomPane:
 		v.focusedPane = components.LeftPane
 	}
+	v.updateFocusState()
+}
+
+// updateFocusState updates component focus states.
+func (v *WorkspaceView) updateFocusState() {
+	v.executionLog.SetFocused(v.focusedPane == components.BottomPane)
 }
 
 // selectFile sets the current file in the code viewer.
 func (v *WorkspaceView) selectFile(file project.File) {
 	v.codeViewer = NewCodeViewerView(file)
+
+	// Calculate content height - reduce if execution log is expanded
+	logHeight := 0
+	if v.executionLog.IsExpanded() {
+		logHeight = 8
+	}
+	contentHeight := v.height - 6 - logHeight // Account for header, footer, and log panel
+
 	// Send size message to initialize viewport
 	v.codeViewer.Update(tea.WindowSizeMsg{
 		Width:  v.getRightPaneWidth(),
-		Height: v.height - 6,
+		Height: contentHeight,
 	})
 }
 
@@ -310,7 +429,13 @@ func (v *WorkspaceView) updateFocusedComponent(msg tea.Msg) tea.Cmd {
 func (v *WorkspaceView) updateChildSizes() {
 	leftWidth := v.getLeftPaneWidth()
 	rightWidth := v.getRightPaneWidth()
-	contentHeight := v.height - 6 // Account for header and footer
+
+	// Calculate content heights - reduce if execution log is expanded
+	logHeight := 0
+	if v.executionLog.IsExpanded() {
+		logHeight = 8 // Fixed height for execution log panel
+	}
+	contentHeight := v.height - 6 - logHeight // Account for header, footer, and log panel
 
 	// Update file tree
 	v.fileTree.Update(tea.WindowSizeMsg{
@@ -331,6 +456,11 @@ func (v *WorkspaceView) updateChildSizes() {
 		Width:  v.width,
 		Height: v.height,
 	})
+
+	// Update execution log size
+	if v.executionLog.IsExpanded() {
+		v.executionLog.SetSize(v.width-2, logHeight)
+	}
 }
 
 // getLeftPaneWidth returns the width of the left pane.
@@ -410,17 +540,24 @@ func (v *WorkspaceView) renderError() string {
 func (v *WorkspaceView) renderWorkspace() string {
 	leftWidth := v.getLeftPaneWidth()
 	rightWidth := v.getRightPaneWidth()
-	contentHeight := v.height - 6
+
+	// Calculate content heights - reduce if execution log is expanded
+	logHeight := 0
+	if v.executionLog.IsExpanded() {
+		logHeight = 8 // Fixed height for execution log panel
+	}
+	contentHeight := v.height - 6 - logHeight
 
 	// Pane styles based on focus
 	leftBorder := styles.Border
 	rightBorder := styles.Border
 	leftTitleColor := styles.TextMuted
 	rightTitleColor := styles.TextMuted
-	if v.focusedPane == components.LeftPane {
+	switch v.focusedPane {
+	case components.LeftPane:
 		leftBorder = styles.Primary
 		leftTitleColor = styles.Primary
-	} else {
+	case components.RightPane:
 		rightBorder = styles.Primary
 		rightTitleColor = styles.Primary
 	}
@@ -476,8 +613,23 @@ func (v *WorkspaceView) renderWorkspace() string {
 	rightContentStyled := rightPaneStyle.Render(rightContent)
 	rightPane := v.renderPanelWithTitle(rightTopBorder, rightContentStyled, contentHeight, rightWidth-2, rightBorder)
 
-	// Join panes
-	workspace := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, " ", rightPane)
+	// Join top panes horizontally
+	topPanes := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, " ", rightPane)
+
+	// Build the workspace layout
+	var workspace string
+	if v.executionLog.IsExpanded() {
+		// Update execution log size
+		v.executionLog.SetSize(v.width-2, logHeight)
+
+		// Get execution log view
+		logView := v.executionLog.View()
+
+		// Stack top panes and execution log vertically
+		workspace = lipgloss.JoinVertical(lipgloss.Left, topPanes, logView)
+	} else {
+		workspace = topPanes
+	}
 
 	// Add help modal overlay if visible
 	if v.help.IsVisible() {
@@ -648,4 +800,60 @@ type workspaceContentLoadedMsg struct {
 
 type workspaceContentErrorMsg struct {
 	err error
+}
+
+// runFunctionResultMsg is sent when a function execution completes.
+type runFunctionResultMsg struct {
+	entry appprocess.ExecutionEntry
+}
+
+// handleRunFunctionSelect handles selection from the run function picker.
+func (v *WorkspaceView) handleRunFunctionSelect(item components.FuzzyItem) tea.Cmd {
+	if item.Function == nil || v.processService == nil {
+		return nil
+	}
+
+	funcName := item.Function.Name
+	v.runningFunc = funcName
+
+	// Create entry and add to log
+	entry := appprocess.ExecutionEntry{
+		ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
+		FunctionName: funcName,
+		Status:       domainprocess.StatusRunning,
+		StartTime:    time.Now(),
+		ScriptID:     v.proj.ID,
+	}
+	v.executionLog.AddEntry(entry)
+	v.executionLog.SetExpanded(true)
+
+	// Start spinner animation
+	spinnerCmd := v.executionLog.StartSpinner()
+
+	// Run the function asynchronously
+	runCmd := func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		result, err := v.processService.RunFunction(ctx, v.proj.ID, funcName)
+		if err != nil {
+			// Create failed entry
+			return runFunctionResultMsg{
+				entry: appprocess.ExecutionEntry{
+					ID:           entry.ID,
+					FunctionName: funcName,
+					Status:       domainprocess.StatusFailed,
+					StartTime:    entry.StartTime,
+					Duration:     time.Since(entry.StartTime),
+					Error:        err.Error(),
+					ScriptID:     v.proj.ID,
+				},
+			}
+		}
+		// Use the original entry ID so UpdateEntry can find it
+		result.ID = entry.ID
+		return runFunctionResultMsg{entry: *result}
+	}
+
+	return tea.Batch(spinnerCmd, runCmd)
 }

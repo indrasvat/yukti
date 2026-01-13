@@ -222,9 +222,10 @@ func (e *ExecutionLog) renderPanel(content string, contentWidth int) string {
 	indicator := indicatorStyle.Render(" ▼ ")
 
 	// Calculate spacing - use lipgloss.Width for accurate ANSI-aware width
+	// Total = 1 (╭) + titleWidth + remainingWidth + indicatorWidth + 1 (╮) = e.width
 	titleWidth := lipgloss.Width(titlePrefix) + lipgloss.Width(badgeStr)
 	indicatorWidth := lipgloss.Width(indicator)
-	remainingWidth := max(0, e.width-4-titleWidth-indicatorWidth)
+	remainingWidth := max(0, e.width-2-titleWidth-indicatorWidth)
 
 	// Build top border - each segment styled separately
 	topBorder := borderStyle.Render("╭") +

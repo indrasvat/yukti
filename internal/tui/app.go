@@ -150,6 +150,7 @@ func (a *App) handleNavigation(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case NavigateMsg:
 		initCmd := a.router.Push(msg.View)
+		// Send full dimensions - the WindowSizeMsg case in Update will adjust height
 		sizeCmd := func() tea.Msg {
 			return tea.WindowSizeMsg{Width: a.width, Height: a.height}
 		}
