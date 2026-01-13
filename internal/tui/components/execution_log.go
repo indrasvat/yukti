@@ -12,6 +12,7 @@ import (
 
 	appprocess "yukti/internal/application/process"
 	"yukti/internal/domain/process"
+	"yukti/internal/infrastructure/google"
 	"yukti/internal/infrastructure/logger"
 	"yukti/internal/tui/styles"
 )
@@ -84,6 +85,19 @@ func (e *ExecutionLog) UpdateEntry(entry appprocess.ExecutionEntry) {
 	}
 }
 
+// ReplacePlaceholder replaces the placeholder entry with the actual result.
+// Placeholder entries have ID "placeholder".
+func (e *ExecutionLog) ReplacePlaceholder(entry appprocess.ExecutionEntry) {
+	for i := range e.entries {
+		if e.entries[i].ID == "placeholder" {
+			e.entries[i] = entry
+			return
+		}
+	}
+	// If no placeholder found, add as new entry
+	e.entries = append([]appprocess.ExecutionEntry{entry}, e.entries...)
+}
+
 // HasRunningEntry returns true if there's at least one running entry.
 func (e *ExecutionLog) HasRunningEntry() bool {
 	for i := range e.entries {
@@ -104,52 +118,150 @@ func (e *ExecutionLog) SetEntries(entries []appprocess.ExecutionEntry) {
 
 // ExecutionLogKeyMap defines key bindings for the execution log.
 type ExecutionLogKeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Expand key.Binding
+	Up      key.Binding
+	Down    key.Binding
+	Expand  key.Binding
+	Refresh key.Binding
 }
 
 // DefaultExecutionLogKeyMap returns the default key bindings.
 func DefaultExecutionLogKeyMap() ExecutionLogKeyMap {
 	return ExecutionLogKeyMap{
-		Up:     key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
-		Down:   key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
-		Expand: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "expand")),
+		Up:      key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
+		Down:    key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
+		Expand:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "toggle logs/open modal")),
+		Refresh: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh logs")),
 	}
+}
+
+// FetchLogsMsg is sent to request log fetching for an entry.
+type FetchLogsMsg struct {
+	EntryID  string
+	ScriptID string
+}
+
+// LogsFetchedMsg is sent when logs have been fetched.
+type LogsFetchedMsg struct {
+	EntryID string
+	Logs    []google.LogEntry
+	Error   string
+}
+
+// OpenLogModalMsg is sent to open the full log modal.
+type OpenLogModalMsg struct {
+	Entry appprocess.ExecutionEntry
 }
 
 // Update handles input events.
 func (e *ExecutionLog) Update(msg tea.Msg) (*ExecutionLog, tea.Cmd) {
-	keys := DefaultExecutionLogKeyMap()
-
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if !e.focused {
-			return e, nil
-		}
-
-		switch {
-		case key.Matches(msg, keys.Up):
-			if e.selected > 0 {
-				e.selected--
-			}
-		case key.Matches(msg, keys.Down):
-			if e.selected < len(e.entries)-1 {
-				e.selected++
-			}
-		case key.Matches(msg, keys.Expand):
-			// Toggle entry expansion (placeholder - entry detail view not yet implemented)
-			_ = e.selected < len(e.entries)
-		}
-
+		return e.handleKeyMsg(msg)
+	case LogsFetchedMsg:
+		e.handleLogsFetched(msg)
 	case SpinnerTickMsg:
-		e.spinnerFrame = (e.spinnerFrame + 1) % len(spinnerFrames)
-		if e.HasRunningEntry() {
-			return e, tickSpinner()
+		return e.handleSpinnerTick()
+	}
+	return e, nil
+}
+
+// handleKeyMsg processes keyboard input.
+func (e *ExecutionLog) handleKeyMsg(msg tea.KeyMsg) (*ExecutionLog, tea.Cmd) {
+	if !e.focused {
+		return e, nil
+	}
+
+	keys := DefaultExecutionLogKeyMap()
+
+	switch {
+	case key.Matches(msg, keys.Up):
+		if e.selected > 0 {
+			e.selected--
+		}
+	case key.Matches(msg, keys.Down):
+		if e.selected < len(e.entries)-1 {
+			e.selected++
+		}
+	case key.Matches(msg, keys.Expand):
+		return e.handleExpandKey()
+	case key.Matches(msg, keys.Refresh):
+		return e.handleRefreshKey()
+	}
+	return e, nil
+}
+
+// handleExpandKey handles the expand/modal key press.
+func (e *ExecutionLog) handleExpandKey() (*ExecutionLog, tea.Cmd) {
+	if e.selected >= len(e.entries) {
+		return e, nil
+	}
+
+	entry := &e.entries[e.selected]
+	if entry.LogsExpanded {
+		// Already expanded - open full modal
+		return e, func() tea.Msg {
+			return OpenLogModalMsg{Entry: *entry}
 		}
 	}
 
+	// Toggle expansion and fetch logs if needed
+	entry.LogsExpanded = true
+	if !entry.LogsLoaded {
+		return e, func() tea.Msg {
+			return FetchLogsMsg{EntryID: entry.ID, ScriptID: entry.ScriptID}
+		}
+	}
 	return e, nil
+}
+
+// handleRefreshKey handles the refresh logs key press.
+func (e *ExecutionLog) handleRefreshKey() (*ExecutionLog, tea.Cmd) {
+	if e.selected >= len(e.entries) {
+		return e, nil
+	}
+
+	entry := &e.entries[e.selected]
+	entry.LogsLoaded = false
+	entry.LogsError = ""
+	return e, func() tea.Msg {
+		return FetchLogsMsg{EntryID: entry.ID, ScriptID: entry.ScriptID}
+	}
+}
+
+// handleLogsFetched updates an entry with fetched logs.
+func (e *ExecutionLog) handleLogsFetched(msg LogsFetchedMsg) {
+	for i := range e.entries {
+		if e.entries[i].ID == msg.EntryID {
+			e.entries[i].Logs = msg.Logs
+			e.entries[i].LogsLoaded = true
+			e.entries[i].LogsError = msg.Error
+			return
+		}
+	}
+}
+
+// handleSpinnerTick advances the spinner animation.
+func (e *ExecutionLog) handleSpinnerTick() (*ExecutionLog, tea.Cmd) {
+	e.spinnerFrame = (e.spinnerFrame + 1) % len(spinnerFrames)
+	if e.HasRunningEntry() {
+		return e, tickSpinner()
+	}
+	return e, nil
+}
+
+// GetSelectedEntry returns the currently selected entry, or nil if none.
+func (e *ExecutionLog) GetSelectedEntry() *appprocess.ExecutionEntry {
+	if e.selected < len(e.entries) {
+		return &e.entries[e.selected]
+	}
+	return nil
+}
+
+// CollapseSelected collapses the currently selected entry's logs.
+func (e *ExecutionLog) CollapseSelected() {
+	if e.selected < len(e.entries) {
+		e.entries[e.selected].LogsExpanded = false
+	}
 }
 
 // SpinnerTickMsg is used to animate the spinner.
@@ -373,6 +485,13 @@ func (e *ExecutionLog) renderEntry(entry appprocess.ExecutionEntry, selected boo
 	icon, iconColor := e.getStatusIcon(entry.Status)
 	iconStyle := lipgloss.NewStyle().Foreground(iconColor)
 
+	// Expansion indicator
+	expandIcon := "▸"
+	if entry.LogsExpanded {
+		expandIcon = "▾"
+	}
+	expandStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+
 	// Function name style
 	fnStyle := lipgloss.NewStyle().Foreground(styles.Primary)
 	if selected && e.focused {
@@ -385,8 +504,8 @@ func (e *ExecutionLog) renderEntry(entry appprocess.ExecutionEntry, selected boo
 		fnName = fnName[:17] + "..."
 	}
 
-	// Build line: icon + function name
-	line := fmt.Sprintf("  %s %s", iconStyle.Render(icon), fnStyle.Render(fnName))
+	// Build line: expand indicator + icon + function name
+	line := fmt.Sprintf("%s %s %s", expandStyle.Render(expandIcon), iconStyle.Render(icon), fnStyle.Render(fnName))
 
 	// Build right-aligned status info
 	statusStyle := lipgloss.NewStyle().Foreground(styles.TextSecondary)
@@ -403,8 +522,87 @@ func (e *ExecutionLog) renderEntry(entry appprocess.ExecutionEntry, selected boo
 	// Add detail line (result/error/running message), padded to full width
 	secondLine := e.getSecondLine(entry, width)
 
+	// Add inline log preview if expanded
+	logLines := e.renderInlineLogs(entry, width, 10)
+
 	// No Background() wrapping - it causes bleed. Selection is indicated by bold fnStyle.
-	return fullLine + secondLine
+	return fullLine + secondLine + logLines
+}
+
+// renderInlineLogs renders inline log preview (up to maxLines).
+func (e *ExecutionLog) renderInlineLogs(entry appprocess.ExecutionEntry, width, maxLines int) string {
+	if !entry.LogsExpanded {
+		return ""
+	}
+
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+
+	// Helper to pad line to full width with plain spaces
+	padLine := func(line string) string {
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < width {
+			line += strings.Repeat(" ", width-lineWidth)
+		}
+		return line
+	}
+
+	// If logs not loaded, show loading state
+	if !entry.LogsLoaded {
+		line := "    " + mutedStyle.Render("│ Loading logs...")
+		return "\n" + padLine(line)
+	}
+
+	// If error fetching logs
+	if entry.LogsError != "" {
+		errStyle := lipgloss.NewStyle().Foreground(styles.Warning)
+		line := "    " + mutedStyle.Render("│ ") + errStyle.Render(entry.LogsError)
+		return "\n" + padLine(line)
+	}
+
+	// If no logs
+	if len(entry.Logs) == 0 {
+		line := "    " + mutedStyle.Render("│ No console output")
+		return "\n" + padLine(line)
+	}
+
+	// Render up to maxLines logs
+	var result strings.Builder
+	logsToShow := min(maxLines, len(entry.Logs))
+
+	for i := 0; i < logsToShow; i++ {
+		log := entry.Logs[i]
+		logLine := e.formatLogEntry(log, width-6)
+		result.WriteString("\n")
+		result.WriteString(padLine("    " + mutedStyle.Render("│ ") + logLine))
+	}
+
+	// If there are more logs, show "Enter for full logs" hint
+	if len(entry.Logs) > maxLines {
+		hint := fmt.Sprintf("... +%d more [Enter for full logs]", len(entry.Logs)-maxLines)
+		hintLine := "    " + mutedStyle.Render("│ "+hint)
+		result.WriteString("\n")
+		result.WriteString(padLine(hintLine))
+	}
+
+	return result.String()
+}
+
+// formatLogEntry formats a single log entry for display.
+func (e *ExecutionLog) formatLogEntry(log google.LogEntry, maxWidth int) string {
+	// Get severity icon and color
+	icon := google.SeverityIcon(log.Severity)
+	color := lipgloss.Color(google.SeverityColor(log.Severity))
+
+	iconStyle := lipgloss.NewStyle().Foreground(color)
+	msgStyle := lipgloss.NewStyle().Foreground(styles.TextPrimary)
+
+	// Format message - truncate if too long
+	msg := log.Message
+	if len(msg) > maxWidth-4 {
+		msg = msg[:maxWidth-7] + "..."
+	}
+
+	return iconStyle.Render(icon) + " " + msgStyle.Render(msg)
 }
 
 // formatDuration formats a duration for display.
