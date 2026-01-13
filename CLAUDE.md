@@ -110,6 +110,64 @@ The `scripts.run` API has strict requirements:
 
 **Reference:** [Execute Functions with the Apps Script API](https://developers.google.com/apps-script/api/how-tos/execute)
 
+### Cloud Logging API (Console Log Viewing)
+
+**Endpoint:** `POST https://logging.googleapis.com/v2/entries:list`
+
+**Required OAuth Scope:** `https://www.googleapis.com/auth/logging.read`
+- Users must re-authenticate (`yukti logout && yukti login`) after upgrading to a version with this scope
+
+**GCP Project Number:**
+- Derived from OAuth client ID prefix (e.g., `576324064670` from `576324064670-xxx.apps.googleusercontent.com`)
+- Can be overridden via `gcp_project` in config.json
+
+**Filter Syntax:**
+```
+resource.type="app_script_function" AND timestamp>="2026-01-12T00:00:00Z" AND timestamp<="2026-01-12T23:59:59Z"
+```
+
+**Log Entry Structure:**
+```go
+type LogEntry struct {
+    Timestamp    time.Time
+    Severity     string    // DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL
+    FunctionName string    // Extracted from labels
+    Message      string    // From textPayload or jsonPayload.message
+}
+```
+
+**Severity Icons (Catppuccin Mocha theme):**
+| Severity | Icon | Color |
+|----------|------|-------|
+| DEBUG, INFO | ℹ️ | Blue (#89B4FA) |
+| NOTICE | 📋 | Yellow (#F9E2AF) |
+| WARNING | ⚠️ | Peach (#FAB387) |
+| ERROR, CRITICAL | ❌ | Red (#F38BA8) |
+
+**Pagination:**
+- Uses `nextPageToken` for subsequent requests
+- Default page size: 100 entries
+- `FetchAllLogs` method handles pagination automatically
+
+**Caching Strategy:**
+- Logs are fetched on-demand when user expands an execution entry
+- Stored in `ExecutionEntry.Logs` to avoid re-fetching
+- `LogsLoaded` flag tracks whether logs have been fetched
+
+**Time Window for Log Correlation:**
+- Fetch logs from `(startTime - 1s)` to `(startTime + duration + 1s)`
+- For running executions, use `time.Now()` as end time
+
+**Common GAS Error Handling:**
+The process service includes user-friendly error messages for common failures:
+| Error Code/Status | User-Friendly Message |
+|-------------------|----------------------|
+| 403 / PERMISSION_DENIED | "Script needs additional permissions - run in browser first" |
+| 401 / UNAUTHENTICATED | "Re-authenticate: yukti logout && yukti login" |
+| 504 / DEADLINE_EXCEEDED | "Execution timed out (6 min limit)" |
+| 404 / NOT_FOUND | "Script not found - ensure script is linked to the same GCP project as your OAuth credentials" |
+| 429 / RESOURCE_EXHAUSTED | "Rate limit exceeded - try again in a moment" |
+
 ## Code Patterns
 
 ### BubbleTea Best Practices
@@ -574,6 +632,29 @@ When creating Apps Script test files for testing Yukti features:
 
 4. **Script ID for testing** - `1XawIjT8_t7YrgT4uB8wmxXqnJfdHPfPwthmcoED7jc9Sr0rv7hV1Hq6D` (Yukti Test Scripts project)
 
+### Console Log Modal Testing
+
+The full-screen log modal can be tested via the iTerm2 automation script at `.claude/automations/test_console_logs.py`.
+
+**Keybindings in Log Modal:**
+| Key | Action |
+|-----|--------|
+| j/k | Scroll up/down |
+| g/G | Go to top/bottom |
+| / | Open search |
+| n/N | Next/prev search match |
+| Enter | Confirm search |
+| Esc | Close search or modal |
+
+**Testing Checklist:**
+1. Run a function with `console.log()` output
+2. Expand execution entry (Enter) to see inline preview
+3. Press Enter again to open full modal
+4. Verify scroll works (j/k/g/G)
+5. Verify search works (/, type query, Enter, n/N)
+6. Verify Esc closes modal cleanly
+7. Screenshots are saved to `.claude/screenshots/`
+
 ## Build System
 
 **Main Targets:**
@@ -613,6 +694,7 @@ When creating Apps Script test files for testing Yukti features:
 - `oauth.client_id` - Google OAuth client ID (required)
 - `oauth.client_secret` - Google OAuth client secret (required)
 - `token_file` - Path to store tokens in file instead of keychain; use `"default"` for platform config dir
+- `gcp_project` - Manual override for GCP project number (optional; auto-derived from OAuth client ID if not set)
 
 **Token Storage Priority:**
 1. `--token-file` flag
