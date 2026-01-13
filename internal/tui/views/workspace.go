@@ -796,32 +796,50 @@ func splitIntoLines(s string) []string {
 	return lines
 }
 
-// overlayModal overlays a modal on top of the background.
+// overlayModal places a modal centered over the background content.
+// The background remains visible around the modal.
 func (v *WorkspaceView) overlayModal(background, modal string) string {
-	bgHeight := lipgloss.Height(background)
-	modalHeight := lipgloss.Height(modal)
+	bgLines := strings.Split(background, "\n")
+	modalLines := strings.Split(modal, "\n")
+
+	bgHeight := len(bgLines)
+	modalHeight := len(modalLines)
 	modalWidth := lipgloss.Width(modal)
 
-	// Calculate center position
-	topPadding := (bgHeight - modalHeight) / 3
-	leftPadding := (v.width - modalWidth) / 2
+	// Calculate center position (1/3 from top for visual balance)
+	topOffset := max(0, (bgHeight-modalHeight)/3)
+	leftOffset := max(0, (v.width-modalWidth)/2)
 
-	topPadding = max(0, topPadding)
-	leftPadding = max(0, leftPadding)
+	// Composite: overlay modal lines onto background
+	result := make([]string, len(bgLines))
+	for i, bgLine := range bgLines {
+		if i >= topOffset && i < topOffset+modalHeight {
+			modalLineIdx := i - topOffset
+			if modalLineIdx < len(modalLines) {
+				result[i] = composeModalLine(bgLine, modalLines[modalLineIdx], leftOffset, modalWidth, v.width)
+			} else {
+				result[i] = bgLine
+			}
+		} else {
+			result[i] = bgLine
+		}
+	}
 
-	// Create padded overlay
-	paddedModal := lipgloss.NewStyle().
-		MarginTop(topPadding).
-		MarginLeft(leftPadding).
-		Render(modal)
+	return strings.Join(result, "\n")
+}
 
-	return lipgloss.Place(
-		v.width,
-		v.height-6,
-		lipgloss.Left,
-		lipgloss.Top,
-		paddedModal,
-	)
+// composeModalLine overlays a modal line onto a background line.
+// Background is visible on sides; modal replaces the center portion.
+func composeModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWidth int) string {
+	_ = bgLine // Background preserved in non-modal lines; modal lines show modal only
+
+	// For modal lines: left spacing + modal + right spacing
+	// Uses plain spaces that inherit terminal background (set via termenv)
+	leftPad := strings.Repeat(" ", leftOffset)
+	rightPadLen := max(0, totalWidth-leftOffset-modalWidth)
+	rightPad := strings.Repeat(" ", rightPadLen)
+
+	return leftPad + "\033[0m" + modalLine + "\033[0m" + rightPad
 }
 
 // loadContent fetches the project content.
