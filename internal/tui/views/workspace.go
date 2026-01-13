@@ -42,6 +42,7 @@ type WorkspaceView struct {
 	fileTree     *components.FileTree
 	codeViewer   *CodeViewerView
 	executionLog *components.ExecutionLog
+	logModal     *components.LogModal // Full screen log viewer
 	fuzzy        *components.FuzzyFinder
 	help         *components.HelpModal
 	spinner      spinner.Model
@@ -201,6 +202,12 @@ func (v *WorkspaceView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleModals handles help modal and fuzzy finder overlays.
 func (v *WorkspaceView) handleModals(msg tea.Msg) (handled bool, cmd tea.Cmd) {
+	// Handle log modal first (full screen overlay)
+	if v.logModal != nil {
+		v.logModal, cmd = v.logModal.Update(msg)
+		return true, cmd
+	}
+
 	// Handle log path info modal
 	if v.showLogPath {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
@@ -261,6 +268,16 @@ func (v *WorkspaceView) handleModals(msg tea.Msg) (handled bool, cmd tea.Cmd) {
 
 // handleMainMessages handles the main workspace messages.
 func (v *WorkspaceView) handleMainMessages(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Try log-related messages first
+	if model, cmd, handled := v.handleLogMessages(msg); handled {
+		return model, cmd
+	}
+
+	// Try execution-related messages
+	if model, cmd, handled := v.handleExecutionMessages(msg); handled {
+		return model, cmd
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -307,11 +324,6 @@ func (v *WorkspaceView) handleMainMessages(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd := v.handleFuzzySelect(msg.Item)
 		return v, cmd
-
-	case runFunctionResultMsg:
-		v.runningFunc = ""
-		v.executionLog.UpdateEntry(msg.entry)
-		return v, nil
 	}
 
 	// Update focused component
@@ -320,6 +332,44 @@ func (v *WorkspaceView) handleMainMessages(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return v, tea.Batch(cmds...)
+}
+
+// handleExecutionMessages handles function execution result messages.
+func (v *WorkspaceView) handleExecutionMessages(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	if msg, ok := msg.(runFunctionResultMsg); ok {
+		v.runningFunc = ""
+		if msg.isNew {
+			// Replace the placeholder entry with the actual result
+			v.executionLog.ReplacePlaceholder(msg.entry)
+		} else {
+			v.executionLog.UpdateEntry(msg.entry)
+		}
+		return v, nil, true
+	}
+	return nil, nil, false
+}
+
+// handleLogMessages handles log-related messages.
+func (v *WorkspaceView) handleLogMessages(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case components.FetchLogsMsg:
+		cmd := v.fetchLogsCmd(msg.EntryID, msg.ScriptID)
+		return v, cmd, true
+
+	case components.LogsFetchedMsg:
+		v.executionLog.Update(msg)
+		return v, nil, true
+
+	case components.OpenLogModalMsg:
+		v.logModal = components.NewLogModal(msg.Entry)
+		v.logModal.SetSize(v.width, v.height)
+		return v, nil, true
+
+	case components.CloseLogModalMsg:
+		v.logModal = nil
+		return v, nil, true
+	}
+	return nil, nil, false
 }
 
 // handleContentLoaded handles when project content is loaded.
@@ -523,6 +573,11 @@ func (v *WorkspaceView) getRightPaneWidth() int {
 
 // View implements tea.Model.
 func (v *WorkspaceView) View() string {
+	// Log modal is full-screen overlay
+	if v.logModal != nil {
+		return v.logModal.View()
+	}
+
 	switch v.state {
 	case WorkspaceStateLoading:
 		return v.renderLoading()
@@ -877,6 +932,7 @@ type workspaceContentErrorMsg struct {
 // runFunctionResultMsg is sent when a function execution completes.
 type runFunctionResultMsg struct {
 	entry appprocess.ExecutionEntry
+	isNew bool // If true, replace placeholder; otherwise update existing
 }
 
 // handleRunFunctionSelect handles selection from the run function picker.
@@ -888,46 +944,84 @@ func (v *WorkspaceView) handleRunFunctionSelect(item components.FuzzyItem) tea.C
 	funcName := item.Function.Name
 	v.runningFunc = funcName
 
-	// Create entry and add to log
-	entry := appprocess.ExecutionEntry{
-		ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
-		FunctionName: funcName,
-		Status:       domainprocess.StatusRunning,
-		StartTime:    time.Now(),
-		ScriptID:     v.proj.ID,
-	}
-	v.executionLog.AddEntry(entry)
-	v.executionLog.SetExpanded(true)
-
-	// Start spinner animation
-	spinnerCmd := v.executionLog.StartSpinner()
-
-	// Run the function asynchronously
+	// Run the function - the process service creates and tracks the entry
 	runCmd := func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
 		result, err := v.processService.RunFunction(ctx, v.proj.ID, funcName)
 		if err != nil {
-			// Create failed entry
+			// Create failed entry for display
 			return runFunctionResultMsg{
 				entry: appprocess.ExecutionEntry{
-					ID:           entry.ID,
+					ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
 					FunctionName: funcName,
 					Status:       domainprocess.StatusFailed,
-					StartTime:    entry.StartTime,
-					Duration:     time.Since(entry.StartTime),
+					StartTime:    time.Now(),
 					Error:        err.Error(),
 					ScriptID:     v.proj.ID,
 				},
+				isNew: true,
 			}
 		}
-		// Use the original entry ID so UpdateEntry can find it
-		result.ID = entry.ID
-		return runFunctionResultMsg{entry: *result}
+		return runFunctionResultMsg{entry: *result, isNew: true}
 	}
 
+	// Show "Running..." immediately
+	placeholder := appprocess.ExecutionEntry{
+		ID:           "placeholder",
+		FunctionName: funcName,
+		Status:       domainprocess.StatusRunning,
+		StartTime:    time.Now(),
+		ScriptID:     v.proj.ID,
+	}
+	v.executionLog.AddEntry(placeholder)
+	v.executionLog.SetExpanded(true)
+
+	// Start spinner animation
+	spinnerCmd := v.executionLog.StartSpinner()
+
 	return tea.Batch(spinnerCmd, runCmd)
+}
+
+// fetchLogsCmd creates a command to fetch logs for an execution entry.
+func (v *WorkspaceView) fetchLogsCmd(entryID, scriptID string) tea.Cmd {
+	if v.processService == nil {
+		return func() tea.Msg {
+			return components.LogsFetchedMsg{
+				EntryID: entryID,
+				Error:   "Process service not available",
+			}
+		}
+	}
+
+	return func() tea.Msg {
+		entry := v.processService.GetEntryByID(scriptID, entryID)
+		if entry == nil {
+			return components.LogsFetchedMsg{
+				EntryID: entryID,
+				Error:   "Entry not found",
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Fetch logs (10 for preview)
+		err := v.processService.FetchLogsForEntry(ctx, entry, 10)
+		if err != nil {
+			return components.LogsFetchedMsg{
+				EntryID: entryID,
+				Error:   err.Error(),
+			}
+		}
+
+		return components.LogsFetchedMsg{
+			EntryID: entryID,
+			Logs:    entry.Logs,
+			Error:   entry.LogsError,
+		}
+	}
 }
 
 // openLogDirectory opens the log directory in the system file manager.
@@ -959,10 +1053,7 @@ func (v *WorkspaceView) renderLogPathModal() string {
 	logPath := logger.Path()
 
 	// Calculate modal width based on content (path is usually longest)
-	modalWidth := len(logPath) + 6 // +6 for padding
-	if modalWidth < 50 {
-		modalWidth = 50
-	}
+	modalWidth := max(len(logPath)+6, 50) // +6 for padding
 
 	// Styles - no Background on inner elements (container provides Surface)
 	titleStyle := lipgloss.NewStyle().
