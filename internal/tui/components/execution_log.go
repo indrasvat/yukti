@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	appprocess "yukti/internal/application/process"
 	"yukti/internal/domain/process"
+	"yukti/internal/infrastructure/logger"
 	"yukti/internal/tui/styles"
 )
 
@@ -257,19 +259,24 @@ func (e *ExecutionLog) renderPanel(content string, contentWidth int) string {
 		result.WriteString(borderStyle.Render("│") + " " + line + " " + borderStyle.Render("│") + "\n")
 	}
 
-	// Bottom border with scroll indicator
+	// Bottom border with log file path and scroll indicator
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+
+	// Show log file name (dimmed) on the left
+	logPath := logger.Path()
+	logFileName := filepath.Base(logPath)
+	logHint := mutedStyle.Render(" " + logFileName + " ")
+
+	// Show scroll hint on the right when focused and scrollable
 	scrollHint := ""
 	if e.focused && len(e.entries) > contentHeight {
-		scrollHint = lipgloss.NewStyle().Foreground(styles.TextMuted).Render(" j/k ↕ ")
+		scrollHint = mutedStyle.Render(" j/k ↕ ")
 	}
 
-	bottomWidth := max(0, e.width-2-lipgloss.Width(scrollHint))
-	var bottomDashes strings.Builder
-	for range bottomWidth {
-		bottomDashes.WriteString("─")
-	}
+	bottomWidth := max(0, e.width-2-lipgloss.Width(logHint)-lipgloss.Width(scrollHint))
 	bottomBorder := borderStyle.Render("╰") +
-		bottomDashes.String() +
+		logHint +
+		borderStyle.Render(strings.Repeat("─", bottomWidth)) +
 		scrollHint +
 		borderStyle.Render("╯")
 

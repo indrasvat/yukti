@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"yukti/internal/infrastructure/config"
+	"yukti/internal/infrastructure/logger"
 )
 
 var (
@@ -27,9 +28,16 @@ interface for browsing, editing, and deploying your scripts.
 
 Run without arguments to start the TUI, or use subcommands for
 specific operations.`,
-	// Set up token file before any command runs
+	// Set up token file and logger before any command runs
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setupTokenFile()
+		// Initialize logger (ignore errors - logging is optional)
+		_ = logger.Init()
+		logger.Info("Starting yukti: %s", cmd.Name())
+	},
+	// Clean up logger when done
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		_ = logger.Close()
 	},
 	// Run TUI when no subcommand is provided
 	Run: func(cmd *cobra.Command, args []string) {

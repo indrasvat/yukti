@@ -10,6 +10,7 @@ import (
 
 	"yukti/internal/domain/process"
 	"yukti/internal/infrastructure/google"
+	"yukti/internal/infrastructure/logger"
 )
 
 // Service manages script execution and tracks execution history.
@@ -46,6 +47,8 @@ func NewService(runner *google.ScriptRunner) *Service {
 // RunFunction executes a function and returns the result.
 // The execution is tracked in the in-memory history.
 func (s *Service) RunFunction(ctx context.Context, scriptID, functionName string) (*ExecutionEntry, error) {
+	logger.Info("Running function %s in script %s", functionName, scriptID)
+
 	// Create the entry
 	entry := &ExecutionEntry{
 		ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -65,6 +68,7 @@ func (s *Service) RunFunction(ctx context.Context, scriptID, functionName string
 	if err != nil {
 		entry.Status = process.StatusFailed
 		entry.Error = err.Error()
+		logger.Error("Function %s failed (API error): %s", functionName, err.Error())
 		s.updateEntry(scriptID, entry.ID, *entry)
 		return entry, nil //nolint:nilerr // Intentionally return entry with nil error so UI can display failure
 	}
@@ -73,6 +77,7 @@ func (s *Service) RunFunction(ctx context.Context, scriptID, functionName string
 	if result.Error != nil {
 		entry.Status = process.StatusFailed
 		entry.Error = formatScriptError(result.Error)
+		logger.Error("Function %s failed (script error): %s", functionName, entry.Error)
 		s.updateEntry(scriptID, entry.ID, *entry)
 		return entry, nil
 	}
@@ -82,6 +87,7 @@ func (s *Service) RunFunction(ctx context.Context, scriptID, functionName string
 	if result.Response != nil {
 		entry.Result = result.Response.Result
 	}
+	logger.Info("Function %s completed in %v", functionName, entry.Duration)
 	s.updateEntry(scriptID, entry.ID, *entry)
 
 	return entry, nil
