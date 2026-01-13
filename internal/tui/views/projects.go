@@ -483,13 +483,7 @@ func (v *ProjectsView) renderList() string {
 			"",
 			noMatchStyle.Render("No projects match your filter"),
 		)
-		paddedContent := lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
-		// Manually pad to fill height (same pattern as main renderList)
-		contentLines := strings.Count(paddedContent, "\n") + 1
-		if contentLines < v.height {
-			paddedContent += strings.Repeat("\n", v.height-contentLines)
-		}
-		return paddedContent
+		return lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
 	}
 
 	// Calculate visible projects
@@ -527,13 +521,6 @@ func (v *ProjectsView) renderList() string {
 		Padding(1, 3).
 		Render(content)
 
-	// Manually pad to fill height so footer stays at bottom and modal overlay works correctly.
-	// We can't use lipgloss.Place() here because app.go also uses Place() in renderFullScreen(),
-	// and double-placement causes the view's header to get cut off.
-	contentLines := strings.Count(paddedContent, "\n") + 1
-	if contentLines < v.height {
-		paddedContent += strings.Repeat("\n", v.height-contentLines)
-	}
 	return paddedContent
 }
 
