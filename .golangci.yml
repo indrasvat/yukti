@@ -46,6 +46,7 @@ linters:
 
     # Error handling
     - errorlint
+    # Note: govet with shadow analyzer enabled (see settings) catches variable shadowing
 
   disable:
     - depguard
@@ -55,6 +56,10 @@ linters:
     - revive  # Too noisy for TUI codebase
 
   settings:
+    govet:
+      enable:
+        - shadow  # Catch variable shadowing bugs like switch msg := msg.(type)
+
     errcheck:
       exclude-functions:
         - fmt.Fprintf

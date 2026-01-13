@@ -383,6 +383,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 **Warning signs:** If views are rendering too tall or content is pushed off screen, check if `WindowSizeMsg` modifications are being properly propagated.
 
+**Linter protection:** The `govet` shadow analyzer catches this. Enabled in `.golangci.yml`:
+```yaml
+settings:
+  govet:
+    enable:
+      - shadow  # Catches switch msg := msg.(type) bugs
+```
+
 #### Bug 2: Empty String Padding Breaks Modal Overlay
 
 **Symptoms:**
