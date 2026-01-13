@@ -138,7 +138,7 @@ func (h *HelpModal) View() string {
 		modalWidth = h.width - 10
 	}
 
-	// Styles
+	// Styles - no Width() on inner elements as lipgloss padding causes bleed
 	titleStyle := lipgloss.NewStyle().
 		Foreground(styles.Primary).
 		Bold(true).
@@ -151,8 +151,7 @@ func (h *HelpModal) View() string {
 
 	keyStyle := lipgloss.NewStyle().
 		Foreground(styles.Info).
-		Bold(true).
-		Width(12)
+		Bold(true)
 
 	descStyle := lipgloss.NewStyle().
 		Foreground(styles.TextSecondary)
@@ -179,7 +178,13 @@ func (h *HelpModal) View() string {
 		content.WriteString("\n")
 
 		for _, binding := range section.Bindings {
-			line := keyStyle.Render(binding.Key) + descStyle.Render(binding.Desc)
+			// Manual padding instead of Width() to avoid bleed
+			keyText := binding.Key
+			keyWidth := lipgloss.Width(keyText)
+			if keyWidth < 12 {
+				keyText += strings.Repeat(" ", 12-keyWidth)
+			}
+			line := keyStyle.Render(keyText) + descStyle.Render(binding.Desc)
 			content.WriteString(line)
 			content.WriteString("\n")
 		}
