@@ -457,9 +457,11 @@ func (v *WorkspaceView) updateChildSizes() {
 		Height: v.height,
 	})
 
-	// Update execution log size
+	// Update execution log size - must match combined width of top panels
+	// Top panels width = (leftWidth-2) + 1 (space) + (rightWidth-2)
 	if v.executionLog.IsExpanded() {
-		v.executionLog.SetSize(v.width-2, logHeight)
+		logWidth := (leftWidth - 2) + 1 + (rightWidth - 2)
+		v.executionLog.SetSize(logWidth, logHeight)
 	}
 }
 
@@ -619,8 +621,9 @@ func (v *WorkspaceView) renderWorkspace() string {
 	// Build the workspace layout
 	var workspace string
 	if v.executionLog.IsExpanded() {
-		// Update execution log size
-		v.executionLog.SetSize(v.width-2, logHeight)
+		// Update execution log size - must match combined width of top panels
+		logWidth := (leftWidth - 2) + 1 + (rightWidth - 2)
+		v.executionLog.SetSize(logWidth, logHeight)
 
 		// Get execution log view
 		logView := v.executionLog.View()
