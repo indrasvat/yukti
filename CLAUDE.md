@@ -192,6 +192,87 @@ func runTUI() {
    return borderStyle.Render(border)  // Style entire string at once
    ```
 
+### Modal Overlays on Styled Background Content
+
+**Problem:** When rendering modals that overlay on styled background content (panels with borders, colored text), the modal area causes background bleed - the rounded borders and styling in the background get "overshadowed" by plain spaces or conflicting ANSI codes.
+
+**Root cause:** Two issues combine:
+1. lipgloss's `Border()`, `Padding()`, and `Width()` don't compose well with overlay operations
+2. Simple overlay implementations replace background content with plain spaces, which show the terminal background instead of preserving the styled content
+
+**The Solution: ANSI-aware string slicing with `ansi.Cut`**
+
+Use `github.com/charmbracelet/x/ansi` (already a transitive dependency) to extract and preserve background content:
+
+```go
+import "github.com/charmbracelet/x/ansi"
+
+// composeModalLine overlays a modal line onto a background line.
+// Background is visible on sides; modal replaces the center portion.
+func composeModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWidth int) string {
+    // Use ansi.Cut to extract background content while preserving ANSI codes
+    leftPart := ansi.Cut(bgLine, 0, leftOffset)
+    rightStart := leftOffset + modalWidth
+    rightPart := ansi.Cut(bgLine, rightStart, totalWidth)
+
+    // Compose: left bg + reset + modal + reset + right bg
+    return leftPart + "\033[0m" + modalLine + "\033[0m" + rightPart
+}
+```
+
+**Key insights:**
+- `ansi.Cut(s, left, right)` extracts characters from position `left` to `right`, preserving ANSI escape codes
+- Add `\033[0m` resets between segments to prevent style bleeding
+- Don't use `Background()` on modal styles - the border provides visual separation
+- For panels (like Execution Log), use manual border rendering with ANSI resets between elements
+
+**Pattern for manual panel borders (same technique works for modals):**
+```go
+// Content lines - use plain spaces for padding (terminal bg is set via termenv)
+verticalBorder := borderStyle.Render("│")
+for i := 0; i < contentHeight; i++ {
+    result.WriteString("\033[0m")        // Reset before border
+    result.WriteString(verticalBorder)
+    result.WriteString(" ")
+    result.WriteString(line)
+    result.WriteString("\033[0m")        // Reset after content
+    result.WriteString(padding)          // Plain spaces
+    result.WriteString(" ")
+    result.WriteString("\033[0m")
+    result.WriteString(verticalBorder)
+    result.WriteString("\n")
+}
+```
+
+### Global Key Handling with Modals
+
+**Problem:** When a view has a modal open, global key handlers (like Back/Esc) intercept keys before the modal can handle them, causing the app to navigate away instead of closing the modal.
+
+**Solution:** Add a `ModalHandler` interface and check before handling global keys:
+
+```go
+// In router.go - optional interface for views with modals
+type ModalHandler interface {
+    HasModal() bool
+}
+
+// In app.go - check before handling Back key
+case key.Matches(msg, a.keys.Back):
+    // Don't intercept Back if current view has a modal open
+    if mh, ok := a.router.Current().(ModalHandler); ok && mh.HasModal() {
+        return nil, false  // Let view handle it
+    }
+    if a.router.CanGoBack() {
+        a.router.Pop()
+        return nil, true
+    }
+
+// In view - implement the interface
+func (v *WorkspaceView) HasModal() bool {
+    return v.showLogPath || v.help.IsVisible() || v.fuzzy.IsVisible()
+}
+```
+
 ## Bug Fixes
 
 ### Linting Issues (Phase 1)
@@ -392,6 +473,7 @@ Key dependencies:
 - `github.com/charmbracelet/bubbletea` - TUI framework
 - `github.com/charmbracelet/lipgloss` - Styling
 - `github.com/charmbracelet/bubbles` - TUI components
+- `github.com/charmbracelet/x/ansi` - ANSI-aware string manipulation (used for modal overlay compositing)
 - `github.com/muesli/termenv` - Terminal environment detection and manipulation (used for setting terminal background color)
 - `github.com/spf13/cobra` - CLI framework
 - `golang.org/x/oauth2` - OAuth2 with PKCE

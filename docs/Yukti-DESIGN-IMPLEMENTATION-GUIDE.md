@@ -1024,10 +1024,12 @@ package tui
 
 import (
     "context"
-    
+    "strings"
+
     tea "github.com/charmbracelet/bubbletea"
     "github.com/charmbracelet/lipgloss"
-    
+    "github.com/charmbracelet/x/ansi"
+
     "yukti/internal/application"
     "yukti/internal/tui/styles"
     "yukti/internal/tui/views"
@@ -1175,21 +1177,49 @@ func (a *App) View() string {
     return view
 }
 
-func (a *App) overlay(base, overlay string) string {
-    // Center overlay on screen
-    overlayStyle := lipgloss.NewStyle().
-        Width(a.width).
-        Height(a.height).
-        Align(lipgloss.Center, lipgloss.Center)
-    
-    return lipgloss.Place(
-        a.width,
-        a.height,
-        lipgloss.Center,
-        lipgloss.Center,
-        overlay,
-        lipgloss.WithWhitespaceForeground(styles.Overlay),
-    )
+func (a *App) overlay(base, modal string) string {
+    // IMPORTANT: lipgloss.Place() doesn't preserve styled background content.
+    // Use ANSI-aware compositing to preserve background borders and styling.
+    // See overlayModal() in workspace.go for the correct implementation.
+    return a.overlayModal(base, modal)
+}
+
+// overlayModal composites a modal onto styled background content.
+// Uses ansi.Cut to preserve ANSI escape codes in background.
+func (a *App) overlayModal(background, modal string) string {
+    bgLines := strings.Split(background, "\n")
+    modalLines := strings.Split(modal, "\n")
+
+    bgHeight := len(bgLines)
+    modalHeight := len(modalLines)
+    modalWidth := lipgloss.Width(modal)
+
+    // Calculate center position
+    topOffset := max(0, (bgHeight-modalHeight)/3)
+    leftOffset := max(0, (a.width-modalWidth)/2)
+
+    // Composite: overlay modal lines onto background
+    result := make([]string, len(bgLines))
+    for i, bgLine := range bgLines {
+        if i >= topOffset && i < topOffset+modalHeight {
+            modalLineIdx := i - topOffset
+            result[i] = composeModalLine(bgLine, modalLines[modalLineIdx], leftOffset, modalWidth, a.width)
+        } else {
+            result[i] = bgLine
+        }
+    }
+    return strings.Join(result, "\n")
+}
+
+// composeModalLine overlays a modal line onto a background line.
+// Uses ansi.Cut to preserve styled background content on sides.
+func composeModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWidth int) string {
+    // Extract background content while preserving ANSI codes
+    leftPart := ansi.Cut(bgLine, 0, leftOffset)
+    rightPart := ansi.Cut(bgLine, leftOffset+modalWidth, totalWidth)
+
+    // Compose with ANSI resets between segments
+    return leftPart + "\033[0m" + modalLine + "\033[0m" + rightPart
 }
 ```
 
