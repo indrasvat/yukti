@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -29,6 +30,9 @@ var scopes = []string{
 
 	// Drive API - needed for listing Apps Script projects
 	"https://www.googleapis.com/auth/drive",
+
+	// Cloud Logging API - needed for viewing console.log output
+	"https://www.googleapis.com/auth/logging.read",
 
 	// Script execution scopes - required for scripts.run API
 	// These must match the services used by the scripts being executed
@@ -238,6 +242,28 @@ func (a *Authenticator) Logout() error {
 func (a *Authenticator) IsAuthenticated(ctx context.Context) bool {
 	token, err := a.GetToken(ctx)
 	return err == nil && token != nil && token.Valid()
+}
+
+// GetGCPProjectNumber returns the GCP project number for Cloud Logging API.
+// If a manual override is provided, it's used. Otherwise, the project number
+// is extracted from the OAuth client ID prefix.
+// Client ID format: "576324064670-xxx.apps.googleusercontent.com" → "576324064670"
+func (a *Authenticator) GetGCPProjectNumber(configOverride string) string {
+	if configOverride != "" {
+		return configOverride
+	}
+	// Client ID format: "576324064670-xxx.apps.googleusercontent.com"
+	// Extract the project number (first segment before the dash)
+	parts := strings.Split(a.config.ClientID, "-")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return ""
+}
+
+// GetClientID returns the OAuth client ID.
+func (a *Authenticator) GetClientID() string {
+	return a.config.ClientID
 }
 
 // generateVerifier creates a PKCE code verifier.
