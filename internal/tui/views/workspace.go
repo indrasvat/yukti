@@ -932,6 +932,12 @@ func (v *WorkspaceView) openLogDirectory() {
 func (v *WorkspaceView) renderLogPathModal() string {
 	logPath := logger.Path()
 
+	// Calculate modal width based on content (path is usually longest)
+	modalWidth := len(logPath) + 6 // +6 for padding
+	if modalWidth < 50 {
+		modalWidth = 50
+	}
+
 	// Styles - no Background on inner elements (container provides Surface)
 	titleStyle := lipgloss.NewStyle().
 		Foreground(styles.Primary).
@@ -947,11 +953,13 @@ func (v *WorkspaceView) renderLogPathModal() string {
 		Italic(true).
 		MarginTop(1)
 
+	// Fixed width ensures background fills properly
 	modalStyle := lipgloss.NewStyle().
 		Background(styles.Surface).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.Primary).
-		Padding(1, 2)
+		Padding(1, 2).
+		Width(modalWidth)
 
 	// Build content
 	var content strings.Builder
