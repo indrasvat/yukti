@@ -92,17 +92,23 @@ func (s *CloudLoggingService) FetchLogs(ctx context.Context, req FetchLogsReques
 
 	// Build the filter query
 	// Apps Script logs use resource.type = "app_script_function"
+	// Note: Try without function name filter first to verify logs exist
 	filter := `resource.type="app_script_function"`
 
+	// Use wider time range to account for Cloud Logging ingestion delay
 	if !req.StartTime.IsZero() {
-		filter += ` AND timestamp>="` + req.StartTime.Format(time.RFC3339) + `"`
+		// Extend start time by 5 minutes to catch delayed logs
+		extendedStart := req.StartTime.Add(-5 * time.Minute)
+		filter += ` AND timestamp>="` + extendedStart.Format(time.RFC3339) + `"`
 	}
 	if !req.EndTime.IsZero() {
-		filter += ` AND timestamp<="` + req.EndTime.Format(time.RFC3339) + `"`
+		// Extend end time by 1 minute
+		extendedEnd := req.EndTime.Add(1 * time.Minute)
+		filter += ` AND timestamp<="` + extendedEnd.Format(time.RFC3339) + `"`
 	}
-	if req.FunctionName != "" {
-		filter += ` AND labels.function_name="` + req.FunctionName + `"`
-	}
+	// Skip function name filter for now - will filter in code if needed
+	// Many Apps Script logs don't have labels.function_name set
+	_ = req.FunctionName // Acknowledge unused for now
 
 	// Build the request body
 	requestBody := map[string]any{
