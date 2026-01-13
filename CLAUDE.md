@@ -342,6 +342,199 @@ xattr -d com.apple.quarantine yukti
 
 Note: Downloads via `curl` or `wget` don't have this issue.
 
+### Help Modal Display Bugs (Critical Lesson)
+
+**Context:** This bug took dozens of commits to fix. TWO separate bugs caused a mutually exclusive failure mode where either the header was pushed off screen OR the modal was cut off at the bottom.
+
+#### Bug 1: Go Switch Type Assertion Variable Shadowing
+
+**Symptoms:**
+- Views received `v.height = 70` when terminal was 70 lines
+- Views SHOULD have received `v.height = 64` (70 - 6 for header/footer)
+- Header got pushed off screen because views rendered to full terminal height
+
+**Root cause:** Go's `switch msg := msg.(type)` creates a **LOCAL** variable that shadows the outer `msg`:
+
+```go
+// BROKEN CODE - DO NOT USE:
+func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    switch msg := msg.(type) {  // ← Creates LOCAL 'msg' that shadows outer!
+    case tea.WindowSizeMsg:
+        msg.Height = max(1, msg.Height-6)  // Only modifies local copy!
+    }
+    // Views receive the ORIGINAL msg with full height
+    return a.router.Current().Update(msg)
+}
+```
+
+**Fix:** Use a different variable name and reassign to outer variable:
+
+```go
+// CORRECT CODE:
+func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    switch typedMsg := msg.(type) {
+    case tea.WindowSizeMsg:
+        typedMsg.Height = max(1, typedMsg.Height-6)
+        msg = typedMsg  // ← CRITICAL: Reassign to outer variable!
+    }
+    return a.router.Current().Update(msg)
+}
+```
+
+**Warning signs:** If views are rendering too tall or content is pushed off screen, check if `WindowSizeMsg` modifications are being properly propagated.
+
+#### Bug 2: Empty String Padding Breaks Modal Overlay
+
+**Symptoms:**
+- Modal appeared to start at column 0 on certain lines instead of being centered
+- Bottom portion of modal was misaligned with top portion
+- Debug screen dumps showed modal content appearing at wrong horizontal position
+
+**Root cause:** `ensureExactHeight()` padded with empty strings `""`. When `ansi.Cut("", 0, leftOffset)` operates on an empty string, it returns an empty string for the left portion:
+
+```go
+// BROKEN CODE - DO NOT USE:
+func ensureExactHeight(content string, height int) string {
+    lines := strings.Split(content, "\n")
+    for len(lines) < height {
+        lines = append(lines, "")  // Empty strings break ansi.Cut!
+    }
+    return strings.Join(lines, "\n")
+}
+
+// When composing modal overlay:
+leftPart := ansi.Cut("", 0, 30)  // Returns "" (empty), not 30 spaces!
+// Result: modal starts at column 0 instead of column 30
+```
+
+**Fix:** Pad with full-width lines of spaces:
+
+```go
+// CORRECT CODE:
+func ensureExactHeight(content string, height, width int) string {
+    lines := strings.Split(content, "\n")
+    emptyLine := strings.Repeat(" ", width)  // Full-width for overlay!
+    for len(lines) < height {
+        lines = append(lines, emptyLine)
+    }
+    return strings.Join(lines, "\n")
+}
+```
+
+**Warning signs:** If modal overlays appear misaligned or shifted to the left on certain lines, check if the background content has proper full-width padding.
+
+#### TUI Testing: Avoid False Positives
+
+**Problem encountered:** Multiple times the fix was declared "complete" when it wasn't. Visual inspection via screenshots wasn't catching the issues.
+
+**Solution: Automated screen content verification**
+
+1. **Always dump screen contents, not just screenshots:**
+   ```python
+   async def dump_screen(session, label: str):
+       screen = await session.async_get_screen_contents()
+       print(f"\n--- {label} ---")
+       for i in range(screen.number_of_lines):
+           line = screen.line(i).string
+           print(f"{i:03d}: {line}")
+   ```
+
+2. **Define explicit pass/fail criteria:**
+   ```python
+   # Check for critical elements by LINE POSITION
+   found_header = False
+   found_modal_top = -1
+   found_modal_bottom = -1
+
+   for i in range(screen.number_of_lines):
+       line = screen.line(i).string
+       if "⚡" in line and "Yukti" in line:
+           found_header = True
+           print(f"✓ Header found on line {i}")
+       if "╭" in line and "Keybindings" in line:
+           found_modal_top = i
+       if "╰" in line and "──────" in line:
+           found_modal_bottom = i
+
+   # Verify modal is COMPLETE (has both top and bottom)
+   if found_modal_top >= 0 and found_modal_bottom > found_modal_top:
+       print(f"✓ Modal complete: top={found_modal_top}, bottom={found_modal_bottom}")
+   else:
+       print(f"✗ Modal INCOMPLETE or missing!")
+   ```
+
+3. **Test both states: before and after modal opens:**
+   - Screenshot/dump the base view
+   - Open modal with `await session.async_send_text("?")`
+   - Screenshot/dump with modal
+   - Verify header is STILL visible (critical for this bug)
+
+4. **Use debug logging in the Go code:**
+   ```go
+   // Add temporary debug logging to understand what values views receive
+   f, _ := os.OpenFile("/tmp/yukti_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+   fmt.Fprintf(f, "renderList: vheight=%d vwidth=%d\n", v.height, v.width)
+   f.Close()
+   ```
+
+## BubbleTea/LipGloss API Reference
+
+### APIs to USE
+
+| API | Purpose | Notes |
+|-----|---------|-------|
+| `lipgloss.MaxHeight(n)` | Cap content height | Use for scrollable areas; truncates excess |
+| `lipgloss.Width(n)` | Set exact width | Reliable for fixed-width panels |
+| `ansi.Cut(s, left, right)` | ANSI-aware substring | Essential for modal overlays |
+| `ansi.StringWidth(s)` | Get display width | Accounts for ANSI codes |
+| `termenv.SetBackgroundColor()` | Terminal default bg | Fills ALL cells including empty ones |
+| `strings.Repeat(" ", width)` | Full-width padding | Required for overlay compositing |
+
+### APIs to AVOID or Use Carefully
+
+| API | Problem | Alternative |
+|-----|---------|-------------|
+| `lipgloss.Height(n)` | Sets MINIMUM, not exact | Use `MaxHeight` + manual padding |
+| `lipgloss.Place()` | Unpredictable with modals | Manual composition with `ansi.Cut` |
+| `switch msg := msg.(type)` | Shadows outer variable | Use `switch typedMsg := msg.(type)` then reassign |
+| Empty string `""` for padding | Breaks `ansi.Cut` overlay | Use `strings.Repeat(" ", width)` |
+| `lipgloss.Background()` | Only styled chars | Use `termenv.SetBackgroundColor()` |
+
+### Height Management Pattern
+
+```go
+// For views that need exact height (e.g., panels with modals):
+func (v *View) renderContent() string {
+    content := v.buildContent()
+
+    // 1. Cap content to available height
+    style := lipgloss.NewStyle().MaxHeight(v.height)
+    content = style.Render(content)
+
+    // 2. Ensure exact height with full-width padding
+    content = ensureExactHeight(content, v.height, v.width)
+
+    return content
+}
+
+func ensureExactHeight(content string, height, width int) string {
+    lines := strings.Split(content, "\n")
+
+    // Truncate if too long
+    if len(lines) > height {
+        lines = lines[:height]
+    }
+
+    // Pad with full-width lines if too short
+    emptyLine := strings.Repeat(" ", width)
+    for len(lines) < height {
+        lines = append(lines, emptyLine)
+    }
+
+    return strings.Join(lines, "\n")
+}
+```
+
 ## Performance Notes
 
 - Project list: Pagination required for >100 projects

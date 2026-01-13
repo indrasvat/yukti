@@ -1090,11 +1090,16 @@ func (a *App) Init() tea.Cmd {
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     var cmds []tea.Cmd
-    
-    switch msg := msg.(type) {
+
+    // IMPORTANT: Use typedMsg (not msg) to avoid shadowing the outer msg variable!
+    // Go's switch type assertion creates a LOCAL variable that shadows the outer one.
+    switch typedMsg := msg.(type) {
     case tea.WindowSizeMsg:
-        a.width = msg.Width
-        a.height = msg.Height
+        a.width = typedMsg.Width
+        a.height = typedMsg.Height
+        // CRITICAL: Modify typedMsg, then reassign to outer msg
+        typedMsg.Height = max(1, typedMsg.Height-6) // Reserve space for header/footer
+        msg = typedMsg // Reassign so views receive the adjusted size!
         // Propagate size to components
         cmds = append(cmds, a.propagateSize())
         
@@ -1222,6 +1227,87 @@ func composeModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWid
     return leftPart + "\033[0m" + modalLine + "\033[0m" + rightPart
 }
 ```
+
+### Critical Implementation Notes
+
+These lessons were learned through extensive debugging. Future implementations MUST follow these patterns:
+
+#### 1. WindowSizeMsg Propagation (CRITICAL)
+
+**Bug:** Go's `switch msg := msg.(type)` creates a LOCAL variable that shadows the outer `msg`. Views receive the original, unmodified message.
+
+```go
+// WRONG - views get full terminal height:
+switch msg := msg.(type) {
+case tea.WindowSizeMsg:
+    msg.Height = msg.Height - 6  // Only modifies local copy!
+}
+
+// CORRECT - views get adjusted height:
+switch typedMsg := msg.(type) {
+case tea.WindowSizeMsg:
+    typedMsg.Height = max(1, typedMsg.Height-6)
+    msg = typedMsg  // Reassign to outer variable!
+}
+```
+
+**Symptom:** Content pushed off screen, views rendering to full terminal height instead of content area.
+
+#### 2. Modal Overlay Compositing (CRITICAL)
+
+**Bug:** When padding content to exact height, using empty strings `""` breaks `ansi.Cut()` overlay operations.
+
+```go
+// WRONG - modal misaligned on padded lines:
+func ensureExactHeight(content string, height int) string {
+    for len(lines) < height {
+        lines = append(lines, "")  // ansi.Cut("", 0, N) returns ""!
+    }
+}
+
+// CORRECT - modal properly centered:
+func ensureExactHeight(content string, height, width int) string {
+    emptyLine := strings.Repeat(" ", width)
+    for len(lines) < height {
+        lines = append(lines, emptyLine)  // Full-width for ansi.Cut
+    }
+}
+```
+
+**Symptom:** Modal starts at column 0 on certain lines instead of being centered.
+
+#### 3. Height Management Pattern
+
+Use `MaxHeight()` to cap content, then `ensureExactHeight()` to pad:
+
+```go
+func (v *View) renderContent() string {
+    content := v.buildContent()
+
+    // 1. Cap content (truncates excess)
+    style := lipgloss.NewStyle().MaxHeight(v.height)
+    content = style.Render(content)
+
+    // 2. Pad to exact height (full-width lines!)
+    content = ensureExactHeight(content, v.height, v.width)
+
+    return content
+}
+```
+
+**Do NOT use:** `lipgloss.Height(n)` alone (sets minimum, not exact).
+
+#### 4. TUI Testing Methodology
+
+Always verify with automated screen dumps, not just visual inspection:
+
+1. Dump screen contents line-by-line to see actual character positions
+2. Define explicit pass/fail criteria (element presence AND position)
+3. Test both states: before AND after modal opens
+4. Verify header remains visible when modal is open
+5. Use debug logging in Go code to verify height/width values
+
+See `.claude/automations/test_projects_help.py` for a complete example.
 
 ### Theme & Styles
 
