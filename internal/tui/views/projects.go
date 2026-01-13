@@ -483,7 +483,8 @@ func (v *ProjectsView) renderList() string {
 			"",
 			noMatchStyle.Render("No projects match your filter"),
 		)
-		return lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
+		paddedContent := lipgloss.NewStyle().Padding(1, 3).Render(noMatchContent)
+		return lipgloss.Place(v.width, v.height, lipgloss.Left, lipgloss.Top, paddedContent)
 	}
 
 	// Calculate visible projects
@@ -521,7 +522,14 @@ func (v *ProjectsView) renderList() string {
 		Padding(1, 3).
 		Render(content)
 
-	return paddedContent
+	// Fill full height so footer stays at bottom and modal overlay works correctly
+	return lipgloss.Place(
+		v.width,
+		v.height,
+		lipgloss.Left,
+		lipgloss.Top,
+		paddedContent,
+	)
 }
 
 func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) string {
