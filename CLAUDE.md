@@ -11,6 +11,12 @@ Future AI sessions should read this file to avoid repeating mistakes.
   - Types: feat, fix, docs, style, refactor, test, chore
   - Keep messages concise and descriptive
 
+## Build & Development Commands
+- ALWAYS use `make` targets instead of running raw commands directly (e.g., `make build` not `go build`, `make lint` not `golangci-lint run`)
+- This ensures consistent flags, environment variables, and build configurations
+- If a needed command doesn't have a `make` target, add one to the Makefile first, then use it
+- See "Build System" section below for available targets
+
 ## Automated TUI Testing With iTerm2-driver Skill
 
 It is VERY IMPORTANT to leverage the `iterm2-driver` skill for automated testing/visulization of the Yukti TUI!
