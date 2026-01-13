@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	appprocess "yukti/internal/application/process"
 	domainprocess "yukti/internal/domain/process"
@@ -837,15 +838,16 @@ func (v *WorkspaceView) overlayModal(background, modal string) string {
 // composeModalLine overlays a modal line onto a background line.
 // Background is visible on sides; modal replaces the center portion.
 func composeModalLine(bgLine, modalLine string, leftOffset, modalWidth, totalWidth int) string {
-	_ = bgLine // Background preserved in non-modal lines; modal lines show modal only
+	// Use ansi.Cut to extract background content while preserving ANSI codes
+	// Left portion: characters 0 to leftOffset
+	leftPart := ansi.Cut(bgLine, 0, leftOffset)
 
-	// For modal lines: left spacing + modal + right spacing
-	// Uses plain spaces that inherit terminal background (set via termenv)
-	leftPad := strings.Repeat(" ", leftOffset)
-	rightPadLen := max(0, totalWidth-leftOffset-modalWidth)
-	rightPad := strings.Repeat(" ", rightPadLen)
+	// Right portion: characters from leftOffset+modalWidth to end
+	rightStart := leftOffset + modalWidth
+	rightPart := ansi.Cut(bgLine, rightStart, totalWidth)
 
-	return leftPad + "\033[0m" + modalLine + "\033[0m" + rightPad
+	// Compose: left bg + reset + modal + reset + right bg
+	return leftPart + "\033[0m" + modalLine + "\033[0m" + rightPart
 }
 
 // loadContent fetches the project content.
@@ -977,9 +979,9 @@ func (v *WorkspaceView) renderLogPathModal() string {
 		Italic(true).
 		MarginTop(1)
 
-	// Fixed width ensures background fills properly
+	// No Background() - modal border provides visual separation
+	// Background causes bleed when composited via overlayModal
 	modalStyle := lipgloss.NewStyle().
-		Background(styles.Surface).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.Primary).
 		Padding(1, 2).

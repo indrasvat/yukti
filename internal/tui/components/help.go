@@ -161,8 +161,9 @@ func (h *HelpModal) View() string {
 		Italic(true).
 		MarginTop(1)
 
+	// No Background() - modal border provides visual separation
+	// Background causes bleed when composited via overlayModal
 	modalStyle := lipgloss.NewStyle().
-		Background(styles.Surface).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.Primary).
 		Padding(1, 2).
