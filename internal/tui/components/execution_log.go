@@ -237,12 +237,13 @@ func (e *ExecutionLog) renderPanel(content string, contentWidth int) string {
 		indicator +
 		borderStyle.Render("╮")
 
-	// Content lines with explicit background
-	bgStyle := lipgloss.NewStyle().Background(styles.Background)
+	// Content lines - use plain spaces for padding (terminal bg is set via termenv)
 	lines := strings.Split(content, "\n")
 	var result strings.Builder
-	result.WriteString(topBorder + "\n")
+	result.WriteString(topBorder)
+	result.WriteString("\033[0m\n") // Reset after top border
 
+	verticalBorder := borderStyle.Render("│")
 	contentHeight := e.height - 2
 	for i := 0; i < contentHeight; i++ {
 		var line string
@@ -250,13 +251,24 @@ func (e *ExecutionLog) renderPanel(content string, contentWidth int) string {
 			line = lines[i]
 		}
 
+		// Use plain spaces for padding to avoid ANSI background issues
 		lineWidth := lipgloss.Width(line)
+		padding := ""
 		if lineWidth < contentWidth {
-			padding := strings.Repeat(" ", contentWidth-lineWidth)
-			line += bgStyle.Render(padding)
+			padding = strings.Repeat(" ", contentWidth-lineWidth)
 		}
 
-		result.WriteString(borderStyle.Render("│") + " " + line + " " + borderStyle.Render("│") + "\n")
+		// Add ANSI resets to ensure clean state between styled elements
+		result.WriteString("\033[0m")
+		result.WriteString(verticalBorder)
+		result.WriteString(" ")
+		result.WriteString(line)
+		result.WriteString("\033[0m") // Reset after content before padding
+		result.WriteString(padding)
+		result.WriteString(" ")
+		result.WriteString("\033[0m")
+		result.WriteString(verticalBorder)
+		result.WriteString("\n")
 	}
 
 	// Bottom border with log file path and scroll indicator
@@ -318,17 +330,15 @@ func getStatusText(status process.Status) string {
 }
 
 // getSecondLine returns the detail line for an entry (result/error/running message).
-// It pads the line to fill the full width with background color to prevent bleed.
+// It pads the line to fill the full width with plain spaces (terminal bg is set via termenv).
 func (e *ExecutionLog) getSecondLine(entry appprocess.ExecutionEntry, width int) string {
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
-	bgStyle := lipgloss.NewStyle().Background(styles.Background)
 
-	// Helper to pad line to full width
+	// Helper to pad line to full width with plain spaces
 	padLine := func(line string) string {
 		lineWidth := lipgloss.Width(line)
 		if lineWidth < width {
-			padding := width - lineWidth
-			line += bgStyle.Render(strings.Repeat(" ", padding))
+			line += strings.Repeat(" ", width-lineWidth)
 		}
 		return line
 	}
