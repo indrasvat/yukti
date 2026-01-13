@@ -3,6 +3,8 @@ package views
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	appprocess "yukti/internal/application/process"
 	domainprocess "yukti/internal/domain/process"
 	"yukti/internal/domain/project"
+	"yukti/internal/infrastructure/logger"
 	"yukti/internal/tui/components"
 	"yukti/internal/tui/styles"
 )
@@ -50,6 +53,7 @@ type WorkspaceView struct {
 	errMsg        string
 	focusedPane   components.Pane
 	showRunPicker bool // Show function picker for running
+	showLogPath   bool // Show log path info modal
 	runningFunc   string
 
 	// Layout
@@ -159,6 +163,11 @@ func (v *WorkspaceView) ShortHelp() []key.Binding {
 		}
 	case components.BottomPane:
 		bindings = append(bindings, v.executionLog.ShortHelp()...)
+		// Add log-specific hints when execution log is focused
+		bindings = append(bindings,
+			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "path")),
+			key.NewBinding(key.WithKeys("O"), key.WithHelp("O", "open dir")),
+		)
 	}
 
 	return bindings
@@ -185,6 +194,16 @@ func (v *WorkspaceView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleModals handles help modal and fuzzy finder overlays.
 func (v *WorkspaceView) handleModals(msg tea.Msg) (handled bool, cmd tea.Cmd) {
+	// Handle log path info modal
+	if v.showLogPath {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			_ = keyMsg // Any key dismisses
+			v.showLogPath = false
+			return true, nil
+		}
+		return true, nil
+	}
+
 	// Handle help modal first if visible
 	if v.help.IsVisible() {
 		v.help.Update(msg)
@@ -304,6 +323,8 @@ func (v *WorkspaceView) handleContentLoaded(msg workspaceContentLoadedMsg) tea.C
 }
 
 // handleKeyMsg handles keyboard input.
+//
+//nolint:gocyclo // Key handlers are naturally complex
 func (v *WorkspaceView) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "tab":
@@ -352,6 +373,15 @@ func (v *WorkspaceView) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 			return cmd
 		}
 	case components.BottomPane:
+		// Handle log-specific keybindings
+		switch msg.String() {
+		case "O":
+			v.openLogDirectory()
+			return nil
+		case "p":
+			v.showLogPath = true
+			return nil
+		}
 		_, cmd := v.executionLog.Update(msg)
 		return cmd
 	}
@@ -634,6 +664,12 @@ func (v *WorkspaceView) renderWorkspace() string {
 		workspace = topPanes
 	}
 
+	// Add log path modal overlay if visible
+	if v.showLogPath {
+		logPathView := v.renderLogPathModal()
+		workspace = v.overlayModal(workspace, logPathView)
+	}
+
 	// Add help modal overlay if visible
 	if v.help.IsVisible() {
 		helpView := v.help.View()
@@ -859,4 +895,64 @@ func (v *WorkspaceView) handleRunFunctionSelect(item components.FuzzyItem) tea.C
 	}
 
 	return tea.Batch(spinnerCmd, runCmd)
+}
+
+// openLogDirectory opens the log directory in the system file manager.
+func (v *WorkspaceView) openLogDirectory() {
+	logPath := logger.Path()
+	// Extract directory from log file path
+	dir := logPath
+	if idx := strings.LastIndex(logPath, "/"); idx > 0 {
+		dir = logPath[:idx]
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", dir) //nolint:gosec // Opening known log directory
+	case "linux":
+		cmd = exec.Command("xdg-open", dir) //nolint:gosec // Opening known log directory
+	case "windows":
+		cmd = exec.Command("explorer", dir) //nolint:gosec // Opening known log directory
+	default:
+		return
+	}
+
+	_ = cmd.Start()
+}
+
+// renderLogPathModal renders a simple modal showing the full log path.
+func (v *WorkspaceView) renderLogPathModal() string {
+	logPath := logger.Path()
+
+	// Styles
+	titleStyle := lipgloss.NewStyle().
+		Foreground(styles.Primary).
+		Bold(true).
+		MarginBottom(1)
+
+	pathStyle := lipgloss.NewStyle().
+		Foreground(styles.Info).
+		Bold(true)
+
+	hintStyle := lipgloss.NewStyle().
+		Foreground(styles.TextMuted).
+		Italic(true).
+		MarginTop(1)
+
+	modalStyle := lipgloss.NewStyle().
+		Background(styles.Surface).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Primary).
+		Padding(1, 2)
+
+	// Build content
+	var content strings.Builder
+	content.WriteString(titleStyle.Render("📁 Log File Path"))
+	content.WriteString("\n\n")
+	content.WriteString(pathStyle.Render(logPath))
+	content.WriteString("\n")
+	content.WriteString(hintStyle.Render("Press any key to close • O to open directory"))
+
+	return modalStyle.Render(content.String())
 }
