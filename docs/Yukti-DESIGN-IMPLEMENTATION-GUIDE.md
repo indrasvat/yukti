@@ -3121,6 +3121,74 @@ func runWithViewAndOpts(view tui.View, opts tui.AppOptions, projectRepo project.
 
 ---
 
+## Open Issues
+
+This section tracks known UI bugs and issues discovered during development.
+
+### Status Bar Duplication
+
+**Problem:** The footer/status bar renders twice, showing two lines of key bindings:
+- Line 1: `tab pane │ ^R run │ L logs │ ...`
+- Line 2: `tab pane │ ^R run │ L hide logs │ ...`
+
+**Analysis:**
+- Both lines show different states of the "L logs/hide logs" toggle
+- Suggests ShortHelp() is being rendered twice with different execution log states
+- May be related to height calculation mismatch between app.go and workspace.go
+- App allocates `headerHeight=3, footerHeight=3` but workspace calculates `height - 6 - logHeight`
+
+**Files Involved:**
+- `internal/tui/app.go` - `renderFooter()`, `View()` height calculations
+- `internal/tui/views/workspace.go` - `ShortHelp()`, `updateChildSizes()`
+
+**Status:** Under investigation
+
+### Files Panel Border Duplication When Log Panel Shows
+
+**Problem:** When the Execution Log panel is expanded, the Files panel (`[1]─Files`) shows duplicated bottom border characters on scroll.
+
+**Possible Causes:**
+- Height calculation mismatch in `renderWorkspace()`
+- Content overflow due to incorrect panel heights
+- Race condition between panel size updates
+
+**Files Involved:**
+- `internal/tui/views/workspace.go` - `renderWorkspace()`, `renderPanelWithTitle()`
+
+**Status:** Not started
+
+### Code Viewer Content Bleed
+
+**Problem:** Code viewer content (e.g., `// Add sample data`) appears in unexpected locations below the expected panel boundaries.
+
+**Analysis:**
+- Related to panel height calculation when execution log is expanded
+- Workspace's `contentHeight = v.height - 6 - logHeight` may not match actual available space
+
+**Status:** Related to status bar duplication issue
+
+### Fixed Issues
+
+#### UTF-8 Slicing in Execution Log Border (Fixed)
+
+**Problem:** `[3]◆◆◆Execution Log` - corrupted characters in panel title
+
+**Root Cause:** Byte slicing on UTF-8 string:
+```go
+title := "[3]─Execution Log"
+titleStyle.Render(title[:4])  // Slices multi-byte ─ character
+```
+The `─` character is 3 bytes in UTF-8, so `[:4]` cuts it mid-character.
+
+**Fix:** Build title parts separately without byte slicing:
+```go
+titlePrefix := titleStyle.Render("[3]─Execution Log")
+```
+
+**Commit:** Fixed in execution_log.go `renderPanel()`
+
+---
+
 ## Appendix: CLAUDE.md Template
 
 This file captures learnings during development:
