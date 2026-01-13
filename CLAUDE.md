@@ -155,8 +155,14 @@ type LogEntry struct {
 - `LogsLoaded` flag tracks whether logs have been fetched
 
 **Time Window for Log Correlation:**
-- Fetch logs from `(startTime - 1s)` to `(startTime + duration + 1s)`
+- Fetch logs from `(startTime - 5min)` to `(startTime + duration + 1min)`
+- Wide time range is **critical** - Cloud Logging has ingestion delay
 - For running executions, use `time.Now()` as end time
+
+**Important Quirks:**
+- `labels.function_name` filter doesn't work reliably - Apps Script logs don't consistently include this label
+- The 5-minute look-back is necessary because Cloud Logging has variable ingestion delay
+- Without the wide time window, queries return 0 results even when logs exist
 
 **Common GAS Error Handling:**
 The process service includes user-friendly error messages for common failures:
