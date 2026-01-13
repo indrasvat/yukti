@@ -3561,6 +3561,242 @@ Future AI sessions should read this file to avoid repeating mistakes.
 **Fix:** Must call viewport.SetContent() after size change
 **Date:** 2026-01-XX
 
+### BUG RESOLVED: Projects View Help Modal + Header Display Conflict
+
+**Status:** ✅ RESOLVED - 2026-01-13
+**Date:** 2026-01-13
+**Priority:** P0 - Was blocking feature development
+
+#### Problem Statement
+
+When adding a help modal overlay to the Projects view, we face a mutually exclusive conflict:
+1. **Without height filling:** Default view shows header correctly, but modal gets cut off (lacks background lines for compositing)
+2. **With height filling:** Modal displays completely, but header gets pushed off the top of the screen
+
+This is the same modal overlay pattern that works correctly in `workspace.go`, but fails in `projects.go`.
+
+#### Test Criteria (MUST ALL PASS)
+
+Using automated iTerm2 test at `.claude/automations/test_projects_help.py`:
+
+| Test | Requirement | How to Verify |
+|------|-------------|---------------|
+| 1 | Default Projects view shows `⚡ Yukti` header | Line 000 contains "⚡" AND "Yukti" |
+| 2 | Default Projects view shows `YOUR PROJECTS` title | Screen contains "YOUR PROJECTS" |
+| 3 | Default Projects view shows `/ Search` box | Screen contains "Search" |
+| 4 | Help modal shows `Keybindings` title | Screen contains "Keybindings" |
+| 5 | Help modal shows Navigation section | Screen contains "Navigation" |
+| 6 | Help modal shows complete bottom border | `╰` character found after `╭` Keybindings line |
+| 7 | **Header visible DURING modal** | Line 000 contains "⚡ Yukti" when modal is open |
+
+**Critical:** Test 7 was the one that kept failing. Previous "fixes" only passed tests 1-6.
+
+#### THE ACTUAL FIX (Two Bugs Found)
+
+**Bug 1: WindowSizeMsg not propagated to views**
+
+In `app.go`, the switch case created a local copy of the message:
+```go
+switch msg := msg.(type) {  // Creates local 'msg' that shadows outer variable
+case tea.WindowSizeMsg:
+    msg.Height = max(1, msg.Height-6)  // Modifies local copy only!
+}
+// After switch, outer 'msg' still has original height
+currentView.Update(msg)  // Views receive FULL terminal height!
+```
+
+**Fix:** Reassign to outer variable after modification:
+```go
+switch typedMsg := msg.(type) {
+case tea.WindowSizeMsg:
+    typedMsg.Height = max(1, typedMsg.Height-6)
+    msg = typedMsg  // Reassign to outer variable!
+}
+```
+
+**Bug 2: Modal overlay compositing broken on empty lines**
+
+`ensureExactHeight` padded with empty strings `""`:
+```go
+for len(lines) < height {
+    lines = append(lines, "")  // Empty strings!
+}
+```
+
+When modal overlay called `ansi.Cut("", 0, leftOffset)`, it returned empty string for the left side, making modal content start at column 0 instead of being centered.
+
+**Fix:** Pad with full-width lines:
+```go
+emptyLine := strings.Repeat(" ", width)
+for len(lines) < height {
+    lines = append(lines, emptyLine)  // Full-width spaces!
+}
+```
+
+#### Attempted Approaches (All Failed - Before Root Cause Found)
+
+**Approach 1: Padding in View() only when modal visible**
+```go
+if v.help.IsVisible() {
+    lines := strings.Split(view, "\n")
+    for len(lines) < v.height {
+        lines = append(lines, "")
+    }
+    view = strings.Join(lines, "\n")
+    view = v.overlayModal(view, v.help.View())
+}
+```
+- Result: Default view OK, modal OK, but header pushed off when modal opens
+- Root cause: Adding lines makes total view exceed terminal height
+
+**Approach 2: lipgloss.Place() in View() for list state only**
+```go
+content := v.renderList()
+view = lipgloss.Place(v.width, v.height, lipgloss.Left, lipgloss.Top, content)
+```
+- Result: Header pushed off in BOTH default and modal views
+- Root cause: Place() creates fixed-size box, combined with app.go header/footer exceeds terminal
+
+**Approach 3: lipgloss.Height() style on renderList() output**
+```go
+styledContent := lipgloss.NewStyle().
+    Padding(1, 3).
+    Width(v.width).
+    Height(v.height).
+    Render(content)
+```
+- Result: Same as Approach 2 - header pushed off
+- Root cause: Height() expands content area beyond available space
+
+**Approach 4: No height manipulation at all**
+```go
+return lipgloss.NewStyle().Padding(1, 3).Render(content)
+```
+- Result: Default view shows header correctly, but modal bottom gets cut off
+- Root cause: Background doesn't have enough lines for modal overlay compositing
+
+**Approach 5: Height() style in app.go on content area**
+```go
+contentStyled := lipgloss.NewStyle().
+    Height(contentHeight).
+    Width(a.width).
+    Render(content)
+```
+- Result: Header pushed off
+- Root cause: Double height constraint (view + app) exceeds terminal
+
+#### Key Observations
+
+1. **workspace.go works** - Uses `Height(contentHeight - 2)` on individual panels, NOT on final output
+2. **welcome.go works** - Uses `lipgloss.Place()` for centering, content is small enough to fit
+3. **projects.go fails** - Has scrollable list that can exceed available height
+
+4. **The fundamental conflict:**
+   - app.go expects views to return content that fits in `v.height` (terminal - 6)
+   - app.go adds header (3 lines) + footer (3 lines) = 6 lines
+   - Total should equal terminal height exactly
+   - BUT: When view content + padding exceeds v.height, scrolling occurs
+
+5. **Why modal overlay needs height:**
+   - Modal compositing uses line-by-line overlay via `ansi.Cut`
+   - If background has fewer lines than modal height + offset, modal gets truncated
+   - Padding lines must exist for modal to composite onto
+
+#### Architecture Understanding
+
+```
+Terminal Height: N lines
+├── Header: 3 lines (rendered by app.go)
+├── Content Area: N-6 lines (v.height passed to views)
+│   └── View renders into this space
+└── Footer: 3 lines (rendered by app.go)
+
+app.go WindowSizeMsg handling:
+  a.height = msg.Height           // Full terminal height
+  msg.Height = msg.Height - 6     // Adjusted for views
+
+View receives: v.height = N-6
+View should return: content that fits in N-6 lines
+app.go adds: header + content + footer = 3 + (N-6) + 3 = N lines ✓
+```
+
+**The problem:** When view content naturally exceeds N-6 lines, OR when we pad to N-6 lines, the math still works. But something is causing the header to scroll off.
+
+#### Questions to Research
+
+1. Does `lipgloss.Height()` create MINIMUM height or EXACT height?
+2. Does `lipgloss.Place()` truncate content that exceeds dimensions?
+3. How does workspace.go avoid this issue with its panels?
+4. Are there known lipgloss/bubbletea issues with height management?
+5. Is there a race condition with WindowSizeMsg delivery?
+
+#### Files Involved
+
+- `internal/tui/views/projects.go` - The problematic view
+- `internal/tui/views/workspace.go` - Working reference implementation
+- `internal/tui/views/welcome.go` - Another working modal implementation
+- `internal/tui/app.go` - App shell handling header/footer/content layout
+- `.claude/automations/test_projects_help.py` - Automated test script
+
+#### Research Findings (2026-01-13)
+
+**Source 1: [lipgloss Height() Behavior](https://pkg.go.dev/github.com/charmbracelet/lipgloss)**
+- `Height()` is a **MINIMUM**, not exact - won't shrink content taller than specified
+- `MaxHeight()` is a **MAXIMUM** - truncates/clips content
+- There's NO built-in "exact height" that both expands AND contracts
+- [GitHub Issue #528](https://github.com/charmbracelet/lipgloss/issues/528) confirms height inconsistency problems
+
+**Source 2: [Overlay Composition Blog Post](https://lmika.org/2022/09/24/overlay-composition-using.html)**
+- Key technique: Render background up to overlay boundary, insert overlay, render rest
+- Critical gotcha: ANSI escape sequences must be preserved when splitting strings
+- Must track visible character positions while collecting escape sequences
+
+**Source 3: [BubbleTea Modal Support Issue #642](https://github.com/charmbracelet/bubbletea/issues/642)**
+- Native modal support requested in 2023
+- Resolution (July 2025): Use **Lipgloss v2** for modal overlays
+- Lipgloss v2 has a new `Canvas` type for proper compositing
+
+**Source 4: [Lipgloss v2 Compositing PR #471](https://github.com/charmbracelet/lipgloss/pull/471)**
+- New `Canvas` type with layers, positions, and z-index
+- Merged May 2025 into v2-exp branch
+- We're currently on lipgloss v1.1.0
+
+**Source 5: [bubbletea-overlay Library](https://pkg.go.dev/github.com/rmhubbert/bubbletea-overlay)**
+- Third-party library for overlay compositing in BubbleTea v1
+- Provides `Composite(fg, bg string, xPos, yPos Position, xOff, yOff int) string`
+- Based on [Superfile's implementation](https://github.com/yorukot/superfile)
+- Works with lipgloss v1
+
+#### Potential Solutions
+
+**Option A: Upgrade to Lipgloss v2 (Recommended long-term)**
+- Use native `Canvas` type for proper layer compositing
+- Breaking change, requires significant refactoring
+- Install: `go get github.com/charmbracelet/lipgloss/v2@v2.0.0-alpha.2`
+
+**Option B: Use bubbletea-overlay Library**
+- Drop-in solution for current lipgloss v1 setup
+- Use `overlay.Composite()` function instead of manual `overlayModal()`
+- Install: `go get github.com/rmhubbert/bubbletea-overlay`
+
+**Option C: Fix Our Manual Compositing**
+- Ensure background ALWAYS has exactly `v.height` lines (not more, not less)
+- The issue may be Padding style adding extra lines beyond content
+- Use `MaxHeight()` to cap, then manually pad to exact height
+
+**Option D: Handle Modal at App Level, Not View Level**
+- Move modal overlay logic to app.go
+- App renders: header + content + footer, THEN overlays modal
+- This ensures header/footer are never affected by view height issues
+
+#### Next Steps
+
+1. ~~Research BubbleTea/lipgloss GitHub issues for similar problems~~ ✅ Done
+2. Try Option C first (fix manual compositing with MaxHeight + exact padding)
+3. If fails, try Option D (modal at app level)
+4. If fails, try Option B (bubbletea-overlay library)
+5. Long-term: Plan migration to Lipgloss v2
+
 ## Performance Notes
 
 - Project list: Pagination required for >100 projects
