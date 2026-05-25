@@ -61,7 +61,7 @@ You'll get a `client_id` and `client_secret` from a downloaded JSON file.
 yukti init
 ```
 
-Enter your Client ID and Client Secret when prompted. The wizard will also ask about token storage (file-based is recommended to avoid keychain prompts).
+Enter your Client ID and Client Secret when prompted. Tokens are stored locally with restricted file permissions.
 
 ### Step 4: Login
 
@@ -141,7 +141,7 @@ only when you intentionally want to overwrite remote HEAD.
 | "This app is blocked" | You need your own OAuth credentials. [Setup guide →](docs/google-oauth-setup.md) |
 | "client_secret is missing" | Re-run `yukti init` and enter both Client ID and Secret |
 | "unverified developer" (macOS) | Run `xattr -d com.apple.quarantine yukti` |
-| Keychain keeps asking for password | Re-run `yukti init` and choose file-based token storage |
+| Need a custom token location | Use `--token-file <path>` or set `YUKTI_TOKEN_FILE` |
 | Token expired | Run `yukti login` again |
 
 ## Building from Source

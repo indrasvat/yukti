@@ -20,9 +20,8 @@ type Config struct {
 	// OAuth2 credentials
 	OAuth OAuthConfig `json:"oauth"`
 
-	// TokenFile stores OAuth tokens in a file instead of system keychain.
-	// Useful to avoid keychain prompts during development.
-	// If empty, uses system keychain.
+	// TokenFile stores OAuth tokens in a specific file.
+	// If empty, uses the platform default token file.
 	TokenFile string `json:"token_file,omitempty"`
 
 	// GCPProject is an optional manual override for the GCP project number.

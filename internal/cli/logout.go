@@ -13,7 +13,7 @@ var logoutCmd = &cobra.Command{
 	Short: "Log out of Google Apps Script",
 	Long: `Remove stored credentials and log out of your Google account.
 
-This will delete your authentication token from the system keychain.
+This will delete your stored authentication token.
 You will need to run 'yukti login' again to access your projects.`,
 	RunE: runLogout,
 }

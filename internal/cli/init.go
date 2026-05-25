@@ -126,8 +126,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Ask about file-based token storage
 	fmt.Println()
 	fmt.Println("Token storage options:")
-	fmt.Println("  • Keychain (default) - Secure, but may prompt for password")
-	fmt.Println("  • File-based - No prompts, tokens stored in config directory")
+	fmt.Println("  • File-based (default) - No prompts, tokens stored with 0600 permissions")
+	fmt.Println("  • Custom file - Set --token-file or YUKTI_TOKEN_FILE")
 	fmt.Println()
 	fmt.Print("Use file-based token storage? (recommended) [Y/n]: ")
 	tokenResponse, _ := reader.ReadString('\n')
@@ -157,7 +157,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if useFileToken {
 		fmt.Printf("  Token storage: %s\n", config.DefaultTokenFilePath())
 	} else {
-		fmt.Println("  Token storage: System keychain")
+		fmt.Println("  Token storage: Platform default token file")
 	}
 	fmt.Println()
 	fmt.Println("Next steps:")

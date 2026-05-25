@@ -22,7 +22,7 @@ var loginCmd = &cobra.Command{
 This will open a browser window for you to sign in with your Google account
 and grant Yukti access to your Apps Script projects.
 
-Your credentials are stored securely in your system keychain.`,
+Your token is stored locally with restricted file permissions.`,
 	RunE: runLogin,
 }
 

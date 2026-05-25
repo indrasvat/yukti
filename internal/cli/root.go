@@ -59,7 +59,7 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&clientID, "client-id", "", "OAuth client ID (overrides config)")
 	rootCmd.PersistentFlags().StringVar(&clientSecret, "client-secret", "", "OAuth client secret (overrides config)")
-	rootCmd.PersistentFlags().StringVar(&tokenFile, "token-file", "", "Store tokens in file instead of keychain (use 'default' for ~/.config/yukti/token.json)")
+	rootCmd.PersistentFlags().StringVar(&tokenFile, "token-file", "", "Store tokens in a specific file (use 'default' for the platform config directory)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }
 
@@ -92,7 +92,7 @@ func setupTokenFile() {
 	if effectivePath != "" {
 		_ = os.Setenv("YUKTI_TOKEN_FILE", effectivePath)
 	}
-	// If none set, env var from shell (if any) is used, otherwise keychain
+	// If none set, env var from shell (if any) is used, otherwise platform default
 }
 
 // expandPath expands ~ to home directory.

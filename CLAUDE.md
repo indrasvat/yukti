@@ -37,7 +37,7 @@ yukti/
 │   ├── infrastructure/ # External services (Google APIs, keychain, config)
 │   │   ├── config/     # Config file management
 │   │   ├── google/     # OAuth authenticator, browser opener
-│   │   └── keychain/   # Token storage (keychain + file-based)
+│   │   └── keychain/   # Token storage abstraction with restricted file stores
 │   └── tui/            # BubbleTea TUI components
 ├── pkg/                # Public packages (syntax, ascii charts)
 └── plugins/            # Plugin implementations
@@ -397,7 +397,9 @@ func (v *WorkspaceView) HasModal() bool {
 **What doesn't work:**
 - Ad-hoc code signing with consistent identifier (`codesign -s - --identifier com.yukti.cli`) - the identifier is the same but the hash still changes
 
-**Solution:** File-based token storage.
+**Solution:** File-based token storage. Yukti now uses restricted token files
+by default on macOS too, avoiding the brittle `go-keychain` dependency and
+cross-compile failures.
 
 Three ways to enable (in priority order):
 1. **Flag:** `yukti --token-file default status` (per-command)
@@ -730,7 +732,7 @@ The full-screen log modal can be tested via the iTerm2 automation script at `.cl
 1. `--token-file` flag
 2. `token_file` in config.json
 3. `YUKTI_TOKEN_FILE` environment variable
-4. System keychain (default)
+4. Platform default token file
 
 **CLI Flags:**
 - `--token-file <path>` - Use file-based token storage (use `default` for config dir)
@@ -804,4 +806,3 @@ Key dependencies:
 - `github.com/muesli/termenv` - Terminal environment detection and manipulation (used for setting terminal background color)
 - `github.com/spf13/cobra` - CLI framework
 - `golang.org/x/oauth2` - OAuth2 with PKCE
-- `github.com/keybase/go-keychain` - macOS Keychain (darwin only)
