@@ -20,6 +20,10 @@ type LinuxStore struct {
 
 // NewStore creates a new keychain store for the current platform.
 func NewStore() Store {
+	if tokenFile := os.Getenv("YUKTI_TOKEN_FILE"); tokenFile != "" {
+		return &LinuxStore{path: expandLinuxTokenPath(tokenFile)}
+	}
+
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		configDir = os.ExpandEnv("$HOME/.config")
@@ -83,4 +87,15 @@ func (s *LinuxStore) DeleteToken() error {
 func (s *LinuxStore) HasToken() bool {
 	_, err := os.Stat(s.path)
 	return err == nil
+}
+
+func expandLinuxTokenPath(path string) string {
+	if path == "" || path[0] != '~' {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[1:])
 }

@@ -20,6 +20,10 @@ type WindowsStore struct {
 
 // NewStore creates a new keychain store for the current platform.
 func NewStore() Store {
+	if tokenFile := os.Getenv("YUKTI_TOKEN_FILE"); tokenFile != "" {
+		return &WindowsStore{path: tokenFile}
+	}
+
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		appData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")

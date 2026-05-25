@@ -106,9 +106,10 @@ func (s *CloudLoggingService) FetchLogs(ctx context.Context, req FetchLogsReques
 		extendedEnd := req.EndTime.Add(1 * time.Minute)
 		filter += ` AND timestamp<="` + extendedEnd.Format(time.RFC3339) + `"`
 	}
-	// Skip function name filter for now - will filter in code if needed
-	// Many Apps Script logs don't have labels.function_name set
-	_ = req.FunctionName // Acknowledge unused for now
+	// Do not add labels.function_name to the Cloud Logging filter. Apps Script
+	// entries do not consistently include that label, so a server-side function
+	// filter can hide valid logs. We filter labeled entries after parsing and
+	// keep unlabeled entries in the time window.
 
 	// Build the request body
 	requestBody := map[string]any{
@@ -164,6 +165,9 @@ func (s *CloudLoggingService) FetchLogs(ctx context.Context, req FetchLogsReques
 	entries := make([]LogEntry, 0, len(apiResp.Entries))
 	for _, e := range apiResp.Entries {
 		entry := parseLogEntry(e)
+		if !matchesFunctionName(entry, req.FunctionName) {
+			continue
+		}
 		entries = append(entries, entry)
 	}
 
@@ -177,6 +181,10 @@ func (s *CloudLoggingService) FetchLogs(ctx context.Context, req FetchLogsReques
 		NextPageToken: apiResp.NextPageToken,
 		TotalEntries:  len(entries),
 	}, nil
+}
+
+func matchesFunctionName(entry LogEntry, functionName string) bool {
+	return functionName == "" || entry.FunctionName == "" || entry.FunctionName == functionName
 }
 
 // FetchAllLogs fetches all logs with automatic pagination.
