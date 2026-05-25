@@ -236,10 +236,11 @@ ci-fast: vet lint-fix test-short build ## Run fast CI (for local development)
 # ══════════════════════════════════════════════════════════════════════════════
 
 .PHONY: release-check
-release-check: ## Check GoReleaser configuration
-	@echo "$(COLOR_BLUE)▶ Checking GoReleaser config...$(COLOR_RESET)"
-	goreleaser check
-	@echo "$(COLOR_GREEN)✓ Config valid$(COLOR_RESET)"
+release-check: ## Validate GoReleaser configuration
+	@echo "$(COLOR_BLUE)▶ Checking release configuration...$(COLOR_RESET)"
+	GO_VERSION=$(GO_VERSION) $(GORELEASER) check
+	GO_VERSION=$(GO_VERSION) $(GORELEASER) release --snapshot --clean --skip=publish
+	@echo "$(COLOR_GREEN)✓ Release configuration passed$(COLOR_RESET)"
 
 .PHONY: release-snapshot
 release-snapshot: ## Build snapshot release (no publish)

@@ -28,10 +28,10 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
-      - -X yukti/internal/cli.Version={{.Version}}
-      - -X yukti/internal/cli.Commit={{.ShortCommit}}
-      - -X yukti/internal/cli.BuildDate={{.Date}}
-      - -X yukti/internal/cli.GoVersion={{.Env.GO_VERSION}}
+      - -X yukti/internal/buildinfo.Version={{.Version}}
+      - -X yukti/internal/buildinfo.Commit={{.ShortCommit}}
+      - -X yukti/internal/buildinfo.BuildDate={{.Date}}
+      - -X yukti/internal/buildinfo.GoVersion={{.Env.GO_VERSION}}
 
 archives:
   - id: default
@@ -68,7 +68,7 @@ changelog:
 
 release:
   github:
-    owner: robinsharma
+    owner: indrasvat
     name: yukti
   draft: false
   prerelease: auto
@@ -88,4 +88,4 @@ release:
     ```
   footer: |
     ---
-    **Full Changelog**: https://github.com/robinsharma/yukti/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/indrasvat/yukti/compare/{{ .PreviousTag }}...{{ .Tag }}
