@@ -18,6 +18,7 @@ import (
 	"yukti/internal/tui"
 	"yukti/internal/tui/styles"
 	"yukti/internal/tui/views"
+	"yukti/internal/workspace"
 )
 
 // runTUI starts the terminal user interface.
@@ -35,7 +36,7 @@ func runTUI() {
 	oauthClientID, oauthClientSecret, err := getOAuthCredentials()
 	if err != nil {
 		// No credentials - show welcome view with setup instructions
-		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
+		runWithViewAndOpts(newWelcomeView(), tui.AppOptions{
 			AuthState:   tui.AuthStateLoggedOut,
 			ViewFactory: views.NewFactory(),
 		}, nil)
@@ -82,7 +83,7 @@ func runTUI() {
 		processService := appprocess.NewService(scriptRunner, loggingService, gcpProjectNum)
 
 		// Show welcome view with repository and process service available
-		runWithViewAndOpts(views.NewWelcomeView(), tui.AppOptions{
+		runWithViewAndOpts(newWelcomeView(), tui.AppOptions{
 			AuthState:   tui.AuthStateLoggedIn,
 			ViewFactory: views.NewFactoryWithService(processService),
 		}, projectRepo)
@@ -94,6 +95,23 @@ func runTUI() {
 		AuthState:   tui.AuthStateLoggedOut,
 		ViewFactory: views.NewFactory(),
 	}, nil)
+}
+
+func newWelcomeView() *views.WelcomeView {
+	root, err := workspace.FindRoot(".")
+	if err != nil {
+		return views.NewWelcomeView()
+	}
+	manifest, err := workspace.LoadManifest(root)
+	if err != nil {
+		return views.NewWelcomeView()
+	}
+	return views.NewWelcomeViewWithWorkspace(&workspace.Result{
+		ScriptID:   manifest.ScriptID,
+		Title:      manifest.Title,
+		Dir:        root,
+		RemoteHash: manifest.LastRemoteHash,
+	})
 }
 
 // runWithViewAndOpts runs the TUI application with the given initial view and options.

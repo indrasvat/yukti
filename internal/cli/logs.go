@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,11 +70,11 @@ func openLogDirectory(logPath string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", dir) //nolint:gosec // Opening known log directory
+		cmd = exec.CommandContext(context.Background(), "open", dir) //nolint:gosec // Opening known log directory
 	case "linux":
-		cmd = exec.Command("xdg-open", dir) //nolint:gosec // Opening known log directory
+		cmd = exec.CommandContext(context.Background(), "xdg-open", dir) //nolint:gosec // Opening known log directory
 	case "windows":
-		cmd = exec.Command("explorer", dir) //nolint:gosec // Opening known log directory
+		cmd = exec.CommandContext(context.Background(), "explorer", dir) //nolint:gosec // Opening known log directory
 	default:
 		fmt.Printf("Cannot open directory on %s. Path: %s\n", runtime.GOOS, dir)
 		return

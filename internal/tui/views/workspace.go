@@ -1036,11 +1036,11 @@ func (v *WorkspaceView) openLogDirectory() {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", dir) //nolint:gosec // Opening known log directory
+		cmd = exec.CommandContext(context.Background(), "open", dir) //nolint:gosec // Opening known log directory
 	case "linux":
-		cmd = exec.Command("xdg-open", dir) //nolint:gosec // Opening known log directory
+		cmd = exec.CommandContext(context.Background(), "xdg-open", dir) //nolint:gosec // Opening known log directory
 	case "windows":
-		cmd = exec.Command("explorer", dir) //nolint:gosec // Opening known log directory
+		cmd = exec.CommandContext(context.Background(), "explorer", dir) //nolint:gosec // Opening known log directory
 	default:
 		return
 	}

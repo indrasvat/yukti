@@ -79,7 +79,7 @@ func (a *Authenticator) Login(ctx context.Context) (*oauth2.Token, error) {
 	challenge := generateChallenge(verifier)
 
 	// Start local callback server on a random port
-	listener, err := net.Listen("tcp", "localhost:0")
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
 		return nil, fmt.Errorf("starting callback server: %w", err)
 	}

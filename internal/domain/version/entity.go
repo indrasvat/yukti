@@ -1,7 +1,10 @@
 // Package version defines the version domain entity and related types.
 package version
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Version represents an immutable snapshot of a project's code.
 type Version struct {
@@ -16,7 +19,7 @@ func (v *Version) String() string {
 	if v.VersionNumber == 0 {
 		return "HEAD"
 	}
-	return "v" + string(rune('0'+v.VersionNumber))
+	return fmt.Sprintf("v%d", v.VersionNumber)
 }
 
 // IsHead returns true if this is the HEAD (development) version.

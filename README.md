@@ -6,6 +6,7 @@ The modern terminal interface for Google Apps Script.
 
 - **Browse** - Navigate projects & files with fuzzy search (Ctrl+P)
 - **Edit** - Syntax-aware code viewing with line numbers
+- **Sync** - Create, clone, pull, diff, and push Apps Script workspaces from the terminal
 - **Deploy** - One-click deployments & versioning (coming soon)
 
 ## Installation
@@ -100,6 +101,38 @@ You should see all green indicators:
 | `yukti logout` | Clear stored credentials |
 | `yukti status` | Show configuration and auth status |
 | `yukti version` | Show version info |
+| `yukti new <title>` | Create a new Apps Script project and local workspace |
+| `yukti clone <script-id>` | Clone a remote Apps Script project |
+| `yukti pull` | Pull remote HEAD into the current workspace |
+| `yukti diff` | Show local changes since the last pull or push |
+| `yukti push` | Push local files to remote HEAD |
+
+## Workspace Sync
+
+Yukti workspaces use a small `yukti.json` manifest to remember the Apps Script
+project ID and the last remote snapshot Yukti saw. That lets `yukti push` catch
+remote edits before replacing the project's HEAD files.
+
+```bash
+yukti new "Invoice Automation"
+cd invoice-automation
+
+# edit Code.gs / appsscript.json locally
+yukti diff
+yukti push
+```
+
+Supported file mapping:
+
+| Local file | Apps Script file |
+|------------|------------------|
+| `Code.gs` | `Code` / `SERVER_JS` |
+| `ui/Dialog.html` | `ui/Dialog` / `HTML` |
+| `appsscript.json` | `appsscript` / `JSON` |
+
+`yukti push` uploads the full project file set. If remote HEAD changed since
+the last pull or push, Yukti stops and asks you to pull first. Use `--force`
+only when you intentionally want to overwrite remote HEAD.
 
 ## Troubleshooting
 

@@ -22,6 +22,7 @@ func NewFileStore(path string) Store {
 
 // StoreToken saves the OAuth token to a file.
 func (s *FileStore) StoreToken(token *oauth2.Token) error {
+	//nolint:gosec // OAuth tokens are intentionally serialized into this 0600 development token file.
 	data, err := json.MarshalIndent(token, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling token: %w", err)

@@ -204,6 +204,13 @@ tidy: ## Tidy go.mod
 	go mod tidy
 	@echo "$(COLOR_GREEN)✓ go.mod tidied$(COLOR_RESET)"
 
+.PHONY: deps-upgrade
+deps-upgrade: ## Upgrade Go module dependencies
+	@echo "$(COLOR_BLUE)▶ Upgrading Go dependencies...$(COLOR_RESET)"
+	go get -u ./...
+	go mod tidy
+	@echo "$(COLOR_GREEN)✓ Dependencies upgraded$(COLOR_RESET)"
+
 .PHONY: verify
 verify: ## Verify dependencies
 	@echo "$(COLOR_BLUE)▶ Verifying dependencies...$(COLOR_RESET)"

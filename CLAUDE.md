@@ -52,6 +52,9 @@ Yukti uses Cobra for CLI management. Available commands:
 - `yukti logout` - Clear stored credentials
 - `yukti status` - Show auth and config state (beautified with colors, progress bar)
 - `yukti version` - Show version info
+- `yukti new <title>` - Create a remote Apps Script project and local workspace
+- `yukti clone <script-id>` - Clone remote project files into a Yukti workspace
+- `yukti pull` / `yukti push` / `yukti diff` - Sync local files with remote HEAD
 
 The `init` wizard prompts for:
 1. Client ID and Client Secret
@@ -90,6 +93,27 @@ Google returns `oauth2: "invalid_request" "client_secret is missing."` without i
 - `getContent` returns files in arbitrary order
 - Empty projects have one file: `appsscript.json`
 - Bound scripts require `parentId` in creation request
+- `updateContent` replaces the entire project HEAD file set; never push without comparing the remote HEAD hash captured in `yukti.json`
+
+### Workspace Sync
+
+Yukti workspace sync is implemented in `internal/workspace`.
+
+**Local manifest:** `yukti.json`
+- Tracks `script_id`, title, last remote content hash, pull timestamp, and per-file hashes
+- Must be written with `0600` permissions because it may reveal private script IDs
+
+**File mapping:**
+| Local | Apps Script |
+|-------|-------------|
+| `appsscript.json` | `name=appsscript`, `type=JSON` |
+| `*.gs` | `type=SERVER_JS`, extension stripped |
+| `*.html` | `type=HTML`, extension stripped |
+| directories | preserved with slash-separated file names |
+
+**Safety rule:** `yukti push` fetches remote HEAD and compares its deterministic hash to `last_remote_hash`. If remote changed, fail unless `--force` is explicit.
+
+**Visual testing:** Use `.shux/scripts/workspace-sync-smoke.sh`; it writes snapshots to `.shux/out/`.
 
 ### Scripts Run API (scripts.run)
 

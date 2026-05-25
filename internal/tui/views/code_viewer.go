@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"yukti/internal/domain/project"
 	tuiStyles "yukti/internal/tui/styles"
@@ -256,28 +257,11 @@ func truncateCode(s string, maxWidth int) string {
 		return "…"
 	}
 
-	// For ANSI strings, we need to be careful about where we cut
-	// Use lipgloss.Width to measure display width
-	if lipgloss.Width(s) <= maxWidth {
+	if ansi.StringWidth(s) <= maxWidth {
 		return s
 	}
 
-	// Simple rune-based truncation - may cut in middle of ANSI codes
-	// but works for most cases. For complex ANSI, would need smarter handling.
-	runes := []rune(s)
-	if len(runes) <= maxWidth-1 {
-		return s
-	}
-
-	// Find a good cut point by measuring progressively
-	for cutPoint := maxWidth - 1; cutPoint > 0; cutPoint-- {
-		truncated := string(runes[:cutPoint]) + "…"
-		if lipgloss.Width(truncated) <= maxWidth {
-			return truncated
-		}
-	}
-
-	return "…"
+	return ansi.Truncate(s, maxWidth, "…")
 }
 
 // fileTypeLabel returns a human-readable label for the file type.

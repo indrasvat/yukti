@@ -73,9 +73,9 @@ jobs:
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           LDFLAGS="-s -w"
-          LDFLAGS="${LDFLAGS} -X yukti/internal/cli.Version=${VERSION}"
-          LDFLAGS="${LDFLAGS} -X yukti/internal/cli.Commit=${COMMIT}"
-          LDFLAGS="${LDFLAGS} -X yukti/internal/cli.BuildDate=${BUILD_DATE}"
+          LDFLAGS="${LDFLAGS} -X yukti/internal/buildinfo.Version=${VERSION}"
+          LDFLAGS="${LDFLAGS} -X yukti/internal/buildinfo.Commit=${COMMIT}"
+          LDFLAGS="${LDFLAGS} -X yukti/internal/buildinfo.BuildDate=${BUILD_DATE}"
 
           EXT=""
           if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi

@@ -34,6 +34,7 @@ func NewStore() Store {
 // StoreToken saves the OAuth token to macOS Keychain.
 func (s *DarwinStore) StoreToken(token *oauth2.Token) error {
 	// Serialize token to JSON
+	//nolint:gosec // OAuth tokens are intentionally serialized before storing in macOS Keychain.
 	data, err := json.Marshal(token)
 	if err != nil {
 		return fmt.Errorf("marshaling token: %w", err)

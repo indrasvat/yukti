@@ -13,6 +13,7 @@ import (
 	"yukti/internal/tui"
 	"yukti/internal/tui/components"
 	"yukti/internal/tui/styles"
+	"yukti/internal/workspace"
 )
 
 // ASCII art logo for Yukti
@@ -26,9 +27,10 @@ const logo = `
 
 // WelcomeView is the initial landing screen.
 type WelcomeView struct {
-	width  int
-	height int
-	help   *components.HelpModal
+	width     int
+	height    int
+	help      *components.HelpModal
+	workspace *workspace.Result
 }
 
 // NewWelcomeView creates a new welcome view.
@@ -38,6 +40,13 @@ func NewWelcomeView() *WelcomeView {
 		height: 24,
 		help:   components.NewHelpModal(),
 	}
+}
+
+// NewWelcomeViewWithWorkspace creates a welcome view with local sync status.
+func NewWelcomeViewWithWorkspace(result *workspace.Result) *WelcomeView {
+	view := NewWelcomeView()
+	view.workspace = result
+	return view
 }
 
 // Title implements tui.View.
@@ -161,20 +170,24 @@ func (v *WelcomeView) View() string {
 	// CTA button
 	cta := ctaStyle.Render("⏎  Press Enter to continue")
 
+	workspaceLine := v.renderWorkspaceLine()
+
 	// Version info
 	version := versionStyle.Render("v" + buildinfo.Version + " • Made with ♥")
 
 	// Combine everything
-	content := lipgloss.JoinVertical(
-		lipgloss.Center,
+	parts := []string{
 		logoRendered,
 		tagline,
 		"",
 		cardRow,
 		"",
-		cta,
-		version,
-	)
+	}
+	if workspaceLine != "" {
+		parts = append(parts, workspaceLine, "")
+	}
+	parts = append(parts, cta, version)
+	content := lipgloss.JoinVertical(lipgloss.Center, parts...)
 
 	// Center in the viewport
 	view := lipgloss.Place(
@@ -191,6 +204,32 @@ func (v *WelcomeView) View() string {
 	}
 
 	return view
+}
+
+func (v *WelcomeView) renderWorkspaceLine() string {
+	if v.workspace == nil {
+		return ""
+	}
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(styles.Primary).
+		Bold(true)
+	cleanStyle := lipgloss.NewStyle().Foreground(styles.Success)
+	dirtyStyle := lipgloss.NewStyle().Foreground(styles.Warning)
+	mutedStyle := lipgloss.NewStyle().Foreground(styles.TextMuted)
+
+	state := cleanStyle.Render("sync ready")
+	if len(v.workspace.Changes) > 0 && !workspace.Dirty(v.workspace.Changes) {
+		state = cleanStyle.Render("clean")
+	}
+	if len(v.workspace.Changes) > 0 && workspace.Dirty(v.workspace.Changes) {
+		state = dirtyStyle.Render(workspace.Summary(v.workspace.Changes))
+	}
+
+	return mutedStyle.Render("Workspace  ") +
+		labelStyle.Render(v.workspace.Title) +
+		mutedStyle.Render("  ") +
+		state
 }
 
 // overlayModal composites a modal onto styled background content.
