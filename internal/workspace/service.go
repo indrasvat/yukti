@@ -138,10 +138,24 @@ func (s *Service) Pull(ctx context.Context, opts PullOptions) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := removeMissingTrackedFiles(root, manifest, files); err != nil {
+	if removeErr := removeMissingTrackedFiles(root, manifest, files); removeErr != nil {
+		return nil, removeErr
+	}
+	result, err := materializeFiles(root, manifest.ScriptID, manifest.Title, files)
+	if err != nil {
 		return nil, err
 	}
-	return materializeFiles(root, manifest.ScriptID, manifest.Title, files)
+	if manifest.DeploymentID != "" {
+		nextManifest, err := LoadManifest(root)
+		if err != nil {
+			return nil, err
+		}
+		nextManifest.DeploymentID = manifest.DeploymentID
+		if saveErr := nextManifest.Save(root); saveErr != nil {
+			return nil, saveErr
+		}
+	}
+	return result, nil
 }
 
 // Push uploads local files to remote HEAD after checking the remote snapshot.
@@ -185,6 +199,7 @@ func (s *Service) Push(ctx context.Context, opts PushOptions) (*Result, error) {
 
 	newHash := ContentHash(localFiles)
 	nextManifest := NewManifest(manifest.ScriptID, manifest.Title, newHash, fileStates(localFiles))
+	nextManifest.DeploymentID = manifest.DeploymentID
 	if err := nextManifest.Save(root); err != nil {
 		return nil, err
 	}

@@ -24,6 +24,7 @@ type Manifest struct {
 	Title          string               `json:"title"`
 	LastRemoteHash string               `json:"last_remote_hash"`
 	LastPulledAt   time.Time            `json:"last_pulled_at"`
+	DeploymentID   string               `json:"deployment_id,omitempty"`
 	Files          map[string]FileState `json:"files"`
 }
 

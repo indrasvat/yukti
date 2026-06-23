@@ -68,9 +68,9 @@ type ExecutionAPIConfig struct {
 type ExecutionAPIAccess string
 
 const (
-	ExecutionAPIAccessMyself WebAppAccess = "MYSELF"
-	ExecutionAPIAccessDomain WebAppAccess = "DOMAIN"
-	ExecutionAPIAccessAnyone WebAppAccess = "ANYONE"
+	ExecutionAPIAccessMyself ExecutionAPIAccess = "MYSELF"
+	ExecutionAPIAccessDomain ExecutionAPIAccess = "DOMAIN"
+	ExecutionAPIAccessAnyone ExecutionAPIAccess = "ANYONE"
 )
 
 // AddOnConfig contains add-on deployment configuration.

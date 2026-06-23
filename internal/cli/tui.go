@@ -67,6 +67,8 @@ func runTUI() {
 		apiClient := google.NewClient(ctx, tokenSource, logger)
 		googleRepo := google.NewProjectRepository(apiClient)
 		projectRepo := cache.NewCachingRepository(googleRepo)
+		deploymentRepo := google.NewDeploymentRepository(apiClient)
+		versionRepo := google.NewVersionRepository(apiClient)
 
 		// Create Cloud Logging service for console.log viewing
 		loggingService := google.NewCloudLoggingService(ctx, tokenSource, logger)
@@ -84,8 +86,10 @@ func runTUI() {
 
 		// Show welcome view with repository and process service available
 		runWithViewAndOpts(newWelcomeView(), tui.AppOptions{
-			AuthState:   tui.AuthStateLoggedIn,
-			ViewFactory: views.NewFactoryWithService(processService),
+			AuthState:      tui.AuthStateLoggedIn,
+			ViewFactory:    views.NewFactoryWithService(processService),
+			DeploymentRepo: deploymentRepo,
+			VersionRepo:    versionRepo,
 		}, projectRepo)
 		return
 	}
