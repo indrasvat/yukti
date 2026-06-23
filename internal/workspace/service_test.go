@@ -92,6 +92,44 @@ func TestPullForceRemovesTrackedFilesDeletedRemotely(t *testing.T) {
 	}
 }
 
+func TestPullPreservesSavedDeploymentID(t *testing.T) {
+	t.Parallel()
+
+	repo := newWorkspaceRepo()
+	repo.projects["script-1"] = &project.Project{ID: "script-1", Title: "Demo"}
+	repo.contents["script-1"] = demoContent()
+
+	dir := filepath.Join(t.TempDir(), "demo")
+	service := NewService(repo)
+	if _, err := service.Clone(context.Background(), CloneOptions{ScriptID: "script-1", Dir: dir}); err != nil {
+		t.Fatalf("Clone() error = %v", err)
+	}
+	manifest, err := LoadManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadManifest() error = %v", err)
+	}
+	manifest.DeploymentID = "AKfycb-release"
+	if saveErr := manifest.Save(dir); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
+	}
+
+	repo.contents["script-1"] = &project.Content{ScriptID: "script-1", Files: []project.File{
+		{Name: "appsscript", Type: project.FileTypeJSON, Source: "{}"},
+		{Name: "Code", Type: project.FileTypeServer, Source: "function remote() {}"},
+	}}
+	if _, pullErr := service.Pull(context.Background(), PullOptions{Dir: dir, Force: true}); pullErr != nil {
+		t.Fatalf("Pull() error = %v", pullErr)
+	}
+
+	manifest, err = LoadManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadManifest() error = %v", err)
+	}
+	if manifest.DeploymentID != "AKfycb-release" {
+		t.Fatalf("DeploymentID = %q, want saved deployment", manifest.DeploymentID)
+	}
+}
+
 func TestPushRefusesWhenRemoteHeadChanged(t *testing.T) {
 	t.Parallel()
 
@@ -150,6 +188,41 @@ func TestPushUpdatesRemoteAndRefreshesManifest(t *testing.T) {
 	}
 	if Dirty(status.Changes) {
 		t.Fatalf("workspace should be clean after push: %+v", status.Changes)
+	}
+}
+
+func TestPushPreservesSavedDeploymentID(t *testing.T) {
+	t.Parallel()
+
+	repo := newWorkspaceRepo()
+	repo.projects["script-1"] = &project.Project{ID: "script-1", Title: "Demo"}
+	repo.contents["script-1"] = demoContent()
+
+	dir := filepath.Join(t.TempDir(), "demo")
+	service := NewService(repo)
+	if _, err := service.Clone(context.Background(), CloneOptions{ScriptID: "script-1", Dir: dir}); err != nil {
+		t.Fatalf("Clone() error = %v", err)
+	}
+	manifest, err := LoadManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadManifest() error = %v", err)
+	}
+	manifest.DeploymentID = "AKfycb-release"
+	if saveErr := manifest.Save(dir); saveErr != nil {
+		t.Fatalf("Save() error = %v", saveErr)
+	}
+	writeFile(t, dir, "Code.gs", "function local() {}")
+
+	if _, pushErr := service.Push(context.Background(), PushOptions{Dir: dir}); pushErr != nil {
+		t.Fatalf("Push() error = %v", pushErr)
+	}
+
+	manifest, err = LoadManifest(dir)
+	if err != nil {
+		t.Fatalf("LoadManifest() error = %v", err)
+	}
+	if manifest.DeploymentID != "AKfycb-release" {
+		t.Fatalf("DeploymentID = %q, want saved deployment", manifest.DeploymentID)
 	}
 }
 

@@ -7,7 +7,7 @@ The modern terminal interface for Google Apps Script.
 - **Browse** - Navigate projects & files with fuzzy search (Ctrl+P)
 - **Edit** - Syntax-aware code viewing with line numbers
 - **Sync** - Create, clone, pull, diff, and push Apps Script workspaces from the terminal
-- **Deploy** - One-click deployments & versioning (coming soon)
+- **Deploy** - Create immutable versions and versioned deployments from the terminal
 
 ## Installation
 
@@ -106,6 +106,13 @@ You should see all green indicators:
 | `yukti pull` | Pull remote HEAD into the current workspace |
 | `yukti diff` | Show local changes since the last pull or push |
 | `yukti push` | Push local files to remote HEAD |
+| `yukti release` | Push the current workspace, create a version, and deploy it |
+| `yukti versions list` | List immutable versions for a script |
+| `yukti versions create` | Create an immutable version from remote HEAD |
+| `yukti deployments list` | List HEAD and versioned deployments |
+| `yukti deployments create` | Create a deployment for a version |
+| `yukti deployments update` | Move an existing deployment to a new version |
+| `yukti deployments delete` | Delete a deployment |
 
 ## Workspace Sync
 
@@ -133,6 +140,49 @@ Supported file mapping:
 `yukti push` uploads the full project file set. If remote HEAD changed since
 the last pull or push, Yukti stops and asks you to pull first. Use `--force`
 only when you intentionally want to overwrite remote HEAD.
+
+## Release & Deploy
+
+`yukti release` is the fastest way to ship from a workspace:
+
+```bash
+yukti release --description "Production rollout"
+```
+
+It safely pushes local files, creates an immutable Apps Script version, creates
+a versioned deployment, saves the deployment ID in `yukti.json`, and prints any
+web app URL returned by Google. Later releases from the same workspace update
+that saved deployment by default, so the URL stays stable.
+
+To update an existing deployment without changing its URL:
+
+```bash
+yukti release --deployment-id AKfycbx... --description "Production rollout"
+```
+
+The TUI can inspect deployments and update selected versioned deployments for
+any project you can access. Workspace URL stability is tracked through
+`yukti.json`, so use `yukti release` from a workspace when you want future CLI
+releases to keep updating the same saved deployment.
+
+You can inspect release state at any time:
+
+```bash
+yukti versions list
+yukti deployments list
+```
+
+For web apps, include `doGet(e)` or `doPost(e)` and configure `webapp` in
+`appsscript.json` before releasing:
+
+```json
+{
+  "webapp": {
+    "access": "ANYONE_ANONYMOUS",
+    "executeAs": "USER_DEPLOYING"
+  }
+}
+```
 
 ## Troubleshooting
 

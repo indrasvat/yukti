@@ -8,7 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"yukti/internal/domain/deployment"
 	"yukti/internal/domain/project"
+	"yukti/internal/domain/version"
 	"yukti/internal/tui/styles"
 )
 
@@ -26,13 +28,16 @@ type ViewFactory interface {
 	CreateProjectsView(repo project.Repository) View
 	CreateProjectDetailView(proj project.Project, repo project.Repository) View
 	CreateCodeViewerView(file project.File) View
+	CreateDeploymentsView(proj project.Project, depRepo deployment.Repository, verRepo version.Repository) View
 }
 
 // AppOptions configures the application.
 type AppOptions struct {
-	AuthState   AuthState
-	UserEmail   string
-	ViewFactory ViewFactory
+	AuthState      AuthState
+	UserEmail      string
+	ViewFactory    ViewFactory
+	DeploymentRepo deployment.Repository
+	VersionRepo    version.Repository
 }
 
 // App is the main application model that coordinates all views.
@@ -48,8 +53,10 @@ type App struct {
 	authState AuthState
 	userEmail string
 
-	// Project repository (nil if not authenticated)
-	projectRepo project.Repository
+	// Repositories (nil if not authenticated)
+	projectRepo    project.Repository
+	deploymentRepo deployment.Repository
+	versionRepo    version.Repository
 
 	// View factory for creating views (avoids circular imports)
 	viewFactory ViewFactory
@@ -65,14 +72,16 @@ type App struct {
 // NewApp creates a new application instance with the given initial view.
 func NewApp(initialView View, opts AppOptions, projectRepo project.Repository) *App {
 	return &App{
-		router:      NewRouter(initialView),
-		keys:        DefaultKeyMap(),
-		width:       80,
-		height:      24,
-		authState:   opts.AuthState,
-		userEmail:   opts.UserEmail,
-		projectRepo: projectRepo,
-		viewFactory: opts.ViewFactory,
+		router:         NewRouter(initialView),
+		keys:           DefaultKeyMap(),
+		width:          80,
+		height:         24,
+		authState:      opts.AuthState,
+		userEmail:      opts.UserEmail,
+		projectRepo:    projectRepo,
+		deploymentRepo: opts.DeploymentRepo,
+		versionRepo:    opts.VersionRepo,
+		viewFactory:    opts.ViewFactory,
 	}
 }
 
@@ -134,8 +143,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyMsg handles global keyboard shortcuts.
 func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.Type == tea.KeyCtrlC || msg.String() == "ctrl+c" {
+		a.quitting = true
+		return tea.Quit, true
+	}
+
 	switch {
 	case key.Matches(msg, a.keys.Quit):
+		if mh, ok := a.router.Current().(ModalHandler); ok && mh.HasModal() {
+			return nil, false
+		}
 		a.quitting = true
 		return tea.Quit, true
 
@@ -190,6 +207,15 @@ func (a *App) handleNavigation(msg tea.Msg) (tea.Cmd, bool) {
 			return Navigate(view), true
 		}
 		return nil, true
+
+	case DeploymentsRequestedMsg:
+		if a.viewFactory != nil && a.deploymentRepo != nil && a.versionRepo != nil {
+			view := a.viewFactory.CreateDeploymentsView(msg.Project, a.deploymentRepo, a.versionRepo)
+			return Navigate(view), true
+		}
+		a.toast = "Deployment API not configured"
+		a.toastLevel = ToastWarning
+		return clearToastAfterDelay(), true
 	}
 	return nil, false
 }
@@ -290,13 +316,20 @@ func (a *App) renderContent(_ int) string {
 // renderFooter renders the bottom help bar.
 func (a *App) renderFooter() string {
 	// Get help from current view
-	bindings := a.router.Current().ShortHelp()
+	currentView := a.router.Current()
+	bindings := currentView.ShortHelp()
+	modalActive := false
+	if mh, ok := currentView.(ModalHandler); ok {
+		modalActive = mh.HasModal()
+	}
 
 	// Add global bindings
-	if a.router.CanGoBack() {
+	if !modalActive && a.router.CanGoBack() {
 		bindings = append(bindings, a.keys.Back)
 	}
-	bindings = append(bindings, a.keys.Quit)
+	if !modalActive {
+		bindings = append(bindings, a.keys.Quit)
+	}
 
 	// Build help text with proper styling
 	keyStyle := lipgloss.NewStyle().

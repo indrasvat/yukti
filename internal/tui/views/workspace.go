@@ -18,6 +18,7 @@ import (
 	domainprocess "yukti/internal/domain/process"
 	"yukti/internal/domain/project"
 	"yukti/internal/infrastructure/logger"
+	"yukti/internal/tui"
 	"yukti/internal/tui/components"
 	"yukti/internal/tui/styles"
 )
@@ -151,6 +152,10 @@ func (v *WorkspaceView) ShortHelp() []key.Binding {
 	}
 
 	bindings = append(bindings,
+		key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "deploy"),
+		),
 		key.NewBinding(
 			key.WithKeys("ctrl+p"),
 			key.WithHelp("^P", "find"),
@@ -412,6 +417,11 @@ func (v *WorkspaceView) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		v.executionLog.Toggle()
 		v.updateChildSizes()
 		return nil
+
+	case "D":
+		return func() tea.Msg {
+			return tui.DeploymentsRequestedMsg{Project: v.proj}
+		}
 
 	case "?":
 		v.help.Toggle()

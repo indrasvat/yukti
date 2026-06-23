@@ -2,7 +2,9 @@ package views
 
 import (
 	appprocess "yukti/internal/application/process"
+	"yukti/internal/domain/deployment"
 	"yukti/internal/domain/project"
+	"yukti/internal/domain/version"
 	"yukti/internal/tui"
 )
 
@@ -37,6 +39,11 @@ func (f *Factory) CreateProjectDetailView(proj project.Project, repo project.Rep
 // CreateCodeViewerView creates a new code viewer for a file.
 func (f *Factory) CreateCodeViewerView(file project.File) tui.View {
 	return NewCodeViewerView(file)
+}
+
+// CreateDeploymentsView creates a deployments view for a project.
+func (f *Factory) CreateDeploymentsView(proj project.Project, depRepo deployment.Repository, verRepo version.Repository) tui.View {
+	return NewDeploymentsView(proj, depRepo, verRepo)
 }
 
 // CreateWorkspaceView creates a new workspace view with split-pane layout.

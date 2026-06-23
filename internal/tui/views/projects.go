@@ -85,13 +85,45 @@ func (v *ProjectsView) Title() string {
 // HasModal returns true if any modal is currently visible.
 // Implements tui.ModalHandler to prevent app from intercepting Back key.
 func (v *ProjectsView) HasModal() bool {
-	return v.help.IsVisible() || v.filtering
+	return v.help.IsVisible() || v.filtering || v.filterInput.Value() != ""
 }
 
 // ShortHelp implements tui.View.
 func (v *ProjectsView) ShortHelp() []key.Binding {
 	if v.state != ProjectListStateReady {
 		return nil
+	}
+	if v.filtering {
+		return []key.Binding{
+			key.NewBinding(
+				key.WithKeys("type"),
+				key.WithHelp("type", "filter"),
+			),
+			key.NewBinding(
+				key.WithKeys("enter"),
+				key.WithHelp("enter", "apply"),
+			),
+			key.NewBinding(
+				key.WithKeys("esc"),
+				key.WithHelp("esc", "close filter"),
+			),
+		}
+	}
+	if v.filterInput.Value() != "" {
+		return []key.Binding{
+			key.NewBinding(
+				key.WithKeys("enter"),
+				key.WithHelp("enter", "open"),
+			),
+			key.NewBinding(
+				key.WithKeys("/"),
+				key.WithHelp("/", "edit filter"),
+			),
+			key.NewBinding(
+				key.WithKeys("esc"),
+				key.WithHelp("esc", "clear filter"),
+			),
+		}
 	}
 
 	return []key.Binding{
@@ -574,8 +606,8 @@ func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) strin
 		badgeStyle = badgeStyle.Background(styles.Success)
 	}
 
-	// Stats style
-	statsStyle := lipgloss.NewStyle().
+	// Script ID style
+	idStyle := lipgloss.NewStyle().
 		Foreground(styles.TextSecondary)
 
 	// Meta style (time, author)
@@ -599,8 +631,9 @@ func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) strin
 		Render("")
 	titleRow := lipgloss.JoinHorizontal(lipgloss.Top, title, spacer, badge)
 
-	// Stats row (placeholder - we'd need file count from content)
-	stats := statsStyle.Render("📄 Files  •  ƒ Functions")
+	// ID row. Project list responses do not include file/function counts, so avoid
+	// rendering fake metadata that looks like a failed load.
+	scriptID := idStyle.Render("ID " + shortProjectID(p.ID))
 
 	// Meta row
 	timeAgo := formatTimeAgo(p.UpdateTime)
@@ -614,11 +647,21 @@ func (v *ProjectsView) renderProjectCard(p project.Project, selected bool) strin
 	cardContent := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleRow,
-		stats,
+		scriptID,
 		meta,
 	)
 
 	return cardStyle.Render(cardContent)
+}
+
+func shortProjectID(id string) string {
+	if id == "" {
+		return "unknown"
+	}
+	if len(id) <= 18 {
+		return id
+	}
+	return id[:10] + "..." + id[len(id)-5:]
 }
 
 func (v *ProjectsView) renderEmpty() string {

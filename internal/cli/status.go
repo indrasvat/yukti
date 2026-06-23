@@ -147,7 +147,11 @@ func printHeader() {
 	fmt.Printf("%s", colorReset)
 
 	// Version info
-	fmt.Printf("  %s%s%s%s\n", colorDim, "v", buildinfo.Version, colorReset)
+	version := buildinfo.Version
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	fmt.Printf("  %s%s%s\n", colorDim, version, colorReset)
 	fmt.Println()
 }
 

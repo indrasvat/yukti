@@ -83,3 +83,8 @@ type ProjectSelectedMsg struct {
 type FileSelectedMsg struct {
 	File project.File
 }
+
+// DeploymentsRequestedMsg requests navigation to the deployments view for a project.
+type DeploymentsRequestedMsg struct {
+	Project project.Project
+}
